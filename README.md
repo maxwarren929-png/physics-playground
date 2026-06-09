@@ -1,49 +1,43 @@
-# 🎮 Physics Playground
+# ■ PHYSICS PLAYGROUND
 
-A playful, colorful physics sandbox in your browser. Spawn shapes, cause explosions, draw walls, place gravity wells — just pure physics fun.
+A monochrome physics sandbox in your browser. Spawn shapes, cause explosions, draw walls, place gravity wells — pure black & white physics chaos.
 
 **[Try it live →](https://maxwarren929-png.github.io/physics-playground/)**
 
-## 🕹️ Features
+## TOOLS
 
-| Tool | What it does |
-|---|---|
-| **Spawn** | Click to spawn circles, squares, or triangles with random pastel colors |
-| **Explode** | Click anywhere to blow things up with a burst of particles |
-| **Wall** | Click and drag to draw static obstacles |
-| **Gravity Well** | Place gravitational attractors that pull objects toward them |
-| **Erase** | Click a shape to remove it |
+| Key | Tool | Action |
+|---|---|---|
+| `1` | **SPAWN** | Click to spawn circles, squares, or triangles |
+| `2` | **EXPLODE** | Click to blow everything up (adjustable power) |
+| `3` | **WALL** | Click & drag to draw static obstacles |
+| `4` | **GRAVITY** | Place gravitational attractors (adjustable pull) |
+| `5` | **ERASE** | Click a shape to remove it |
+| `Space` | **PAUSE** | Freeze / resume physics |
 
-## ⌨️ Keyboard Shortcuts
+## SLIDERS
 
-| Key | Action |
-|---|---|
-| `1` | Spawn tool |
-| `2` | Explosion tool |
-| `3` | Wall tool |
-| `4` | Gravity Well tool |
-| `5` | Erase tool |
-| `Space` | Pause / Resume physics |
+- **Explosion Power** — how hard things fly apart
+- **Gravity Pull** — how strongly gravity wells attract objects
 
-## 🛠️ Built With
+## STYLE
+
+Black background. White shapes. Pixel particles. No colors, no distractions.
+
+## BUILT WITH
 
 - **[Matter.js](https://brm.io/matter-js/)** — 2D physics engine
-- Vanilla HTML/CSS/JS — no bundlers, no frameworks
+- Vanilla HTML/CSS/JS — zero dependencies, zero frameworks
 
-## 🚀 Running Locally
+## LOCAL
 
 ```bash
 git clone https://github.com/maxwarren929-png/physics-playground.git
 cd physics-playground
-# Open index.html in your browser
-# Or serve locally:
-#   npx serve .
+# open index.html or:
+# npx serve .
 ```
 
-## 📸 Preview
+## LICENSE
 
-![Physics Playground Demo](preview.gif)
-
-## 📝 License
-
-MIT — go wild.
+MIT

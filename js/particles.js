@@ -1,36 +1,26 @@
 /**
- * Physics Playground — Particle Effects System
- * Lightweight burst particles for collisions and explosions.
+ * Physics Playground — Pixel Particle Effects
+ * Tiny black squares for collisions and explosions.
  */
 
 const Particles = (() => {
   let particles = [];
 
-  function spawn(x, y, color, count = 10, opts = {}) {
-    const speed = opts.speed || 3;
-    const size = opts.size || 4;
+  function spawn(x, y, count = 10, opts = {}) {
+    const speed = opts.speed || 4;
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const v = speed * (0.3 + Math.random() * 0.7);
-      const life = 30 + Math.random() * 40;
+      const v = speed * (0.2 + Math.random() * 0.8);
+      const life = 15 + Math.random() * 25;
       particles.push({
         x, y,
         vx: Math.cos(angle) * v,
         vy: Math.sin(angle) * v,
         life,
         maxLife: life,
-        size: size * (0.3 + Math.random() * 0.7),
-        color: adjustBrightness(color, 20 + Math.random() * 40)
+        size: 1 + (Math.random() * 2) | 0  // 1–3 px
       });
     }
-  }
-
-  function adjustBrightness(hex, amount) {
-    const num = parseInt(hex.slice(1), 16);
-    const r = Math.min(255, Math.max(0, (num >> 16) + amount));
-    const g = Math.min(255, Math.max(0, ((num >> 8) & 0x00FF) + amount));
-    const b = Math.min(255, Math.max(0, (num & 0x0000FF) + amount));
-    return `rgb(${r},${g},${b})`;
   }
 
   function update() {
@@ -41,8 +31,8 @@ const Particles = (() => {
       const p = particles[i];
       p.x += p.vx;
       p.y += p.vy;
-      p.vx *= 0.97;
-      p.vy += 0.05; // gravity
+      p.vx *= 0.95;
+      p.vy += 0.08; // particle gravity
       p.life--;
 
       if (p.life <= 0) {
@@ -50,20 +40,15 @@ const Particles = (() => {
         continue;
       }
 
-      const alpha = p.life / p.maxLife;
+      const alpha = (p.life / p.maxLife) * 0.9;
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
     }
     ctx.globalAlpha = 1;
   }
 
-  function clear() {
-    particles = [];
-  }
-
+  function clear() { particles = []; }
   function getCount() { return particles.length; }
 
   return { spawn, update, clear, getCount };

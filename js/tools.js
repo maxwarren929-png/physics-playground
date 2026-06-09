@@ -8,6 +8,7 @@ const Tools = (() => {
   let currentShape = 'circle';
   let isDrawing = false;
   let drawStart = null;
+  let mouseX = 0, mouseY = 0;
 
   // ── Spawn ──
   function handleSpawn(x, y) {
@@ -16,18 +17,14 @@ const Tools = (() => {
 
   // ── Explosion ──
   function handleExplode(x, y) {
-    Physics.explode(x, y, 150, 0.05);
+    const strength = parseFloat(document.getElementById('explosionStrength').value);
+    Physics.explode(x, y, strength);
   }
 
   // ── Draw Wall ──
   function handleWallStart(x, y) {
     isDrawing = true;
     drawStart = { x, y };
-  }
-
-  function handleWallMove(x, y) {
-    if (!isDrawing || !drawStart) return;
-    // Preview while drawing
   }
 
   function handleWallEnd(x, y) {
@@ -46,60 +43,65 @@ const Tools = (() => {
   // ── Erase ──
   function handleErase(x, y) {
     const body = Physics.getBodyAt(x, y);
-    if (body) {
-      Physics.removeBody(body);
-    }
+    if (body) Physics.removeBody(body);
   }
 
   // ── Dispatch ──
   function onMouseDown(x, y) {
     switch (currentTool) {
-      case 'spawn': handleSpawn(x, y); break;
+      case 'spawn':   handleSpawn(x, y); break;
       case 'explode': handleExplode(x, y); break;
-      case 'wall': handleWallStart(x, y); break;
+      case 'wall':    handleWallStart(x, y); break;
       case 'gravity': handleGravity(x, y); break;
-      case 'erase': handleErase(x, y); break;
+      case 'erase':   handleErase(x, y); break;
     }
   }
 
   function onMouseMove(x, y) {
-    if (currentTool === 'wall' && isDrawing) {
-      // We'll draw a preview line in the render loop
-    }
+    mouseX = x;
+    mouseY = y;
+    Physics.setMousePos(x, y);
   }
 
   function onMouseUp(x, y) {
-    if (currentTool === 'wall') {
-      handleWallEnd(x, y);
+    if (currentTool === 'wall') handleWallEnd(x, y);
+  }
+
+  // ── Tool switching ──
+  function setTool(tool) {
+    currentTool = tool;
+    // Cancel any wall draw in progress
+    isDrawing = false;
+    drawStart = null;
+
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.querySelector(`[data-tool="${tool}"]`);
+    if (btn) btn.classList.add('active');
+
+    document.querySelectorAll('.tool-options-group').forEach(g => g.classList.remove('active'));
+    const opt = document.getElementById(`${tool}Options`);
+    if (opt) opt.classList.add('active');
+
+    const canvas = Physics.getCanvas();
+    if (canvas) {
+      const cursors = { spawn: 'crosshair', explode: 'cell', wall: 'copy', gravity: 'grab', erase: 'not-allowed' };
+      canvas.style.cursor = cursors[tool] || 'default';
     }
   }
 
-  function setTool(tool) {
-    currentTool = tool;
-    // Update UI
-    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector(`[data-tool="${tool}"]`).classList.add('active');
-    document.querySelectorAll('.tool-options-group').forEach(g => g.classList.remove('active'));
-    const optGroup = document.getElementById(`${tool}Options`);
-    if (optGroup) optGroup.classList.add('active');
-    // Cursor changes
-    const canvas = Physics.getCanvas();
-    canvas.style.cursor = tool === 'spawn' ? 'crosshair'
-      : tool === 'explode' ? 'cell'
-      : tool === 'wall' ? 'copy'
-      : tool === 'gravity' ? 'grab'
-      : tool === 'erase' ? 'not-allowed' : 'default';
-  }
-
+  // ── Accessors ──
   function isCurrentlyDrawing() { return isDrawing; }
   function getDrawStart() { return drawStart; }
   function getCurrentTool() { return currentTool; }
   function getCurrentShape() { return currentShape; }
   function setCurrentShape(shape) { currentShape = shape; }
+  function getMouseX() { return mouseX; }
+  function getMouseY() { return mouseY; }
 
   return {
     onMouseDown, onMouseMove, onMouseUp, setTool,
     isCurrentlyDrawing, getDrawStart, getCurrentTool,
-    getCurrentShape, setCurrentShape
+    getCurrentShape, setCurrentShape,
+    getMouseX, getMouseY
   };
 })();

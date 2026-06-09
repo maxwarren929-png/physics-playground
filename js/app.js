@@ -1,16 +1,15 @@
 /**
  * Physics Playground — Main App
- * Initializes the canvas, physics, tools, and runs the render loop.
+ * Initializes canvas, physics, tools, and runs the render loop.
  */
 
 (function() {
   const canvas = document.getElementById('canvas');
   let isPaused = false;
 
-  // Init physics
   Physics.init(canvas);
 
-  // ── Mouse events ──
+  // ── Mouse helpers ──
   function getMousePos(e) {
     const rect = canvas.getBoundingClientRect();
     return {
@@ -21,23 +20,24 @@
 
   canvas.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
-    Tools.onMouseDown(getMousePos(e).x, getMousePos(e).y);
+    const p = getMousePos(e);
+    Tools.onMouseDown(p.x, p.y);
   });
 
   canvas.addEventListener('mousemove', (e) => {
-    Tools.onMouseMove(getMousePos(e).x, getMousePos(e).y);
+    const p = getMousePos(e);
+    Tools.onMouseMove(p.x, p.y);
   });
 
   canvas.addEventListener('mouseup', (e) => {
     if (e.button !== 0) return;
-    Tools.onMouseUp(getMousePos(e).x, getMousePos(e).y);
+    const p = getMousePos(e);
+    Tools.onMouseUp(p.x, p.y);
   });
 
   // ── Toolbar buttons ──
   document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      Tools.setTool(btn.dataset.tool);
-    });
+    btn.addEventListener('click', () => Tools.setTool(btn.dataset.tool));
   });
 
   // ── Shape options ──
@@ -49,34 +49,43 @@
     });
   });
 
+  // ── Explosion strength slider ──
+  const expSlider = document.getElementById('explosionStrength');
+  const expVal = document.getElementById('explosionStrengthVal');
+  if (expSlider && expVal) {
+    expSlider.addEventListener('input', () => {
+      expVal.textContent = parseFloat(expSlider.value).toFixed(2);
+    });
+  }
+
   // ── Gravity strength slider ──
-  const slider = document.getElementById('gravityStrength');
-  const sliderVal = document.getElementById('gravityStrengthVal');
-  slider.addEventListener('input', () => {
-    sliderVal.textContent = parseFloat(slider.value).toFixed(4);
-  });
+  const gravSlider = document.getElementById('gravityStrength');
+  const gravVal = document.getElementById('gravityStrengthVal');
+  if (gravSlider && gravVal) {
+    gravSlider.addEventListener('input', () => {
+      gravVal.textContent = parseFloat(gravSlider.value).toFixed(1);
+    });
+  }
 
-  // ── Clear button ──
-  document.getElementById('clearBtn').addEventListener('click', () => {
-    Physics.clearAll();
-  });
+  // ── Clear ──
+  document.getElementById('clearBtn').addEventListener('click', () => Physics.clearAll());
 
-  // ── Pause button ──
+  // ── Pause ──
   document.getElementById('pauseBtn').addEventListener('click', () => {
-    Physics.togglePause();
-    isPaused = !isPaused;
+    const running = Physics.togglePause();
+    isPaused = !running;
     const icon = document.getElementById('pauseIcon');
     const label = document.getElementById('pauseLabel');
     if (isPaused) {
       icon.innerHTML = '<polygon points="5,3 19,12 5,21"/>';
-      label.textContent = 'Play';
+      label.textContent = '>PLAY';
     } else {
       icon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
-      label.textContent = 'Pause';
+      label.textContent = 'PAUSE';
     }
   });
 
-  // ── Keyboard shortcuts ──
+  // ── Keyboard ──
   document.addEventListener('keydown', (e) => {
     const key = e.key.toLowerCase();
     const map = {
@@ -101,6 +110,6 @@
   }
   loop();
 
-  console.log('🎮 Physics Playground loaded!');
-  console.log('📌 Tools: Spawn(1), Explode(2), Wall(3), Gravity(4), Erase(5), Pause(Space)');
+  console.log('■ PHYSICS PLAYGROUND ■');
+  console.log('[1] Spawn  [2] Explode  [3] Wall  [4] Gravity  [5] Erase  [Space] Pause');
 })();
