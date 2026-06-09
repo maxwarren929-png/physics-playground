@@ -515,7 +515,7 @@ const Physics = (() => {
       if (p.length < 3) return false;
       let area = 0;
       for (let i = 0; i < p.length; i++) { const j = (i + 1) % p.length; area += p[i][0] * p[j][1] - p[j][0] * p[i][1]; }
-      return Math.abs(area) / 2 > 150;
+      return Math.abs(area) / 2 > 300;
     });
 
     if (fragments.length > 8) {
@@ -528,13 +528,23 @@ const Physics = (() => {
 
     let fragCount = 0;
     for (const fp of fragments) {
-      const fv = fp.map(p => ({ x: p[0], y: p[1] }));
+      // Clean near-duplicate vertices
+      const cleaned = [];
+      for (const pt of fp) {
+        const prev = cleaned[cleaned.length - 1];
+        if (!prev || Math.abs(prev[0] - pt[0]) > 2 || Math.abs(prev[1] - pt[1]) > 2) cleaned.push(pt);
+      }
+      if (cleaned.length < 3) continue;
+
+      const fv = cleaned.map(p => ({ x: p[0], y: p[1] }));
       const centre = Vertices.centre(fv);
+      if (!isFinite(centre.x) || !isFinite(centre.y)) continue;
+
       try {
         const frag = Bodies.fromVertices(centre.x, centre.y, [fv], {
           restitution: 0.12, friction: 0.6, density: 0.002, label: 'Fragment'
         });
-        if (frag) {
+        if (frag && frag.vertices && frag.vertices.length >= 3) {
           const fdx = centre.x - explosionX, fdy = centre.y - explosionY;
           const fd = Math.sqrt(fdx * fdx + fdy * fdy) || 1;
           const power = (1 - dist / 250) * force * 0.5;
@@ -758,7 +768,14 @@ const Physics = (() => {
   // ── Render ──
   function update() {
     // Manually step the engine (no Runner, more reliable pause/resume)
-    if (!paused) Engine.update(engine, 1000 / 60);
+    if (!paused) {
+      try {
+        Engine.update(engine, 1000 / 60);
+      } catch(e) {
+        // Matter.js collision bug with degenerate vertices — skip frame
+        console.warn('Engine update skipped:', e.message);
+      }
+    }
 
     // Respawn breached boundaries
     const now = Date.now();
