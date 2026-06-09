@@ -1,0 +1,169 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', -apple-system, system-ui, sans-serif;
+  overflow: hidden;
+  background: #f0ebe3;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  cursor: crosshair;
+}
+
+/* ── Toolbar ── */
+#toolbar {
+  position: fixed;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  z-index: 100;
+}
+
+.tool-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 56px;
+  padding: 8px 4px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: #666;
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tool-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.tool-btn:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.tool-btn.active {
+  background: #ffddd6;
+  color: #e06050;
+  box-shadow: 0 2px 8px rgba(224, 96, 80, 0.2);
+}
+
+.tool-btn.active:hover {
+  background: #ffd0c8;
+}
+
+.toolbar-divider {
+  width: 60%;
+  height: 1px;
+  background: #e0d8d0;
+  margin: 4px auto;
+}
+
+/* ── Tool Options ── */
+#toolOptions {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(12px);
+  border-radius: 14px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-options-group {
+  display: none;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-options-group.active {
+  display: flex;
+}
+
+.opt-btn {
+  padding: 4px 12px;
+  border: 2px solid transparent;
+  border-radius: 20px;
+  background: #f5f0eb;
+  color: #555;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.opt-btn:hover {
+  background: #ebe0d8;
+}
+
+.opt-btn.active {
+  border-color: #e06050;
+  background: #ffddd6;
+  color: #e06050;
+}
+
+#toolOptions label {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#toolOptions input[type="range"] {
+  width: 100px;
+  accent-color: #e06050;
+}
+
+#gravityStrengthVal {
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  min-width: 36px;
+}
+
+/* ── Object counter ── */
+#objectCounter {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  z-index: 100;
+}
