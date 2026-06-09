@@ -7,7 +7,18 @@
   const canvas = document.getElementById('canvas');
   let isPaused = false;
 
-  Physics.init(canvas);
+  const physicsReady = Physics.init(canvas);
+  if (!physicsReady) {
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#f44';
+      ctx.font = '14px monospace';
+      ctx.fillText('Physics engine failed to load. Check console.', 20, 30);
+    }
+    return;
+  }
 
   // ── Mouse helpers ──
   function getMousePos(e) {

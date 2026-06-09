@@ -63,7 +63,19 @@
   <!-- Object counter -->
   <div id="objectCounter">OBJECTS: 0</div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+  <script>
+  window.onerror = function(msg, url, line, col, err) {
+    console.error('GLOBAL ERROR:', msg, 'at', url+':'+line+':'+col);
+    if (err && err.stack) console.error('STACK:', err.stack);
+    document.body.innerHTML = '<div style="color:red;padding:20px;font-family:monospace;font-size:14px">'
+      + '<b>ERROR:</b> ' + msg + '<br><br>'
+      + '<b>File:</b> ' + url + ':' + line + ':' + col + '<br><br>'
+      + (err && err.stack ? '<pre>' + err.stack + '</pre>' : '')
+      + '</div>';
+    return true;
+  };
+  </script>
+  <script src="matter.min.js"></script>
   <script src="js/physics.js"></script>
   <script src="js/particles.js"></script>
   <script src="js/tools.js"></script>

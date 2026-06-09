@@ -16,15 +16,21 @@ const Physics = (() => {
   let dragOffset = { x: 0, y: 0 };
 
   function init(canvasEl) {
+    try {
     canvas = canvasEl;
     ctx = canvas.getContext('2d');
 
     resize();
     window.addEventListener('resize', resize);
 
+    if (typeof Matter === 'undefined') {
+      throw new Error('Matter.js failed to load');
+    }
+
     engine = Engine.create({
       gravity: { x: 0, y: 2 }
     });
+    if (!engine) throw new Error('Engine.create returned undefined');
     world = engine.world;
 
     createBoundaries();
@@ -44,6 +50,20 @@ const Physics = (() => {
     });
 
     return physics;
+    } catch(e) {
+      console.error('Physics.init failed:', e.message, e.stack);
+      if (typeof Matter !== 'undefined' && Matter.Engine) {
+        // fallback: use Matter.js default renderer
+        const r = Matter.Render.create({
+          element: document.body,
+          engine: Matter.Engine.create({gravity:{x:0,y:2}}),
+          options: { background: '#000', wireframeBackground: '#000' }
+        });
+        Matter.Render.run(r);
+        Matter.Runner.run(Matter.Runner.create(), r.engine);
+      }
+      return null;
+    }
   }
 
   function resize() {
