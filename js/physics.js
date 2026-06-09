@@ -23,6 +23,7 @@ const Physics = (() => {
   let canvas, ctx;
   let gravityWells = [];
   let forceBodies = [];
+  let boundaryBreachTimers = {};
   let mouseX = 0, mouseY = 0;
   let dragBody = null;
   let dragOffset = { x: 0, y: 0 };
@@ -107,7 +108,7 @@ const Physics = (() => {
   let boundaryBodies = [];
   function createBoundaries() {
     const t = 60;
-    const opts = { isStatic: true, restitution: 0.3, label: 'Boundary', collisionFilter: { category: 0x0002 } };
+    const opts = { isStatic: true, restitution: 0.3, label: 'Boundary' };
     boundaryBodies = [
       Bodies.rectangle(worldW / 2, worldH + t / 2, worldW + t * 2, t, opts),
       Bodies.rectangle(-t / 2, worldH / 2, t, worldH + t * 2, opts),
@@ -295,8 +296,7 @@ const Physics = (() => {
   // ── Unstoppable Force ──
   function spawnForce(x, y) {
     const body = Bodies.circle(x, y, 24, {
-      restitution: 0, friction: 0, density: 0.05, label: 'Force', frictionAir: 0,
-      collisionFilter: { mask: 0x0001 } // only collides with default-category bodies
+      restitution: 0, friction: 0, density: 0.05, label: 'Force', frictionAir: 0
     });
     body._damage = 0; body._cracks = [];
     Composite.add(world, body);
@@ -305,8 +305,36 @@ const Physics = (() => {
       // Constant thrust to the right
       Body.applyForce(body, body.position, { x: 0.003 * body.mass, y: 0 });
 
-      // Damage any Immovable it's crushing into
       const allBodies = Composite.allBodies(world);
+
+      // Destroy walls the Force is grinding against
+      allBodies.forEach(b => {
+        if (b.label === 'Wall') {
+          const dx = body.position.x - b.position.x;
+          const dy = body.position.y - b.position.y;
+          if (Math.abs(dx) < 50 && Math.abs(dy) < 50) {
+            shatterBody(b, b.position.x, b.position.y, 0.5, 0);
+          }
+        }
+      });
+
+      // Breach boundaries — temporarily remove the wall segment the Force is pushing on
+      allBodies.forEach(b => {
+        if (b.label === 'Boundary' && body.position.x > -50 && body.position.x < worldW + 50 && body.position.y > -50 && body.position.y < worldH + 50) {
+          const dx = body.position.x - b.position.x;
+          const dy = body.position.y - b.position.y;
+          const halfW = (b.bounds.max.x - b.bounds.min.x) / 2;
+          const halfH = (b.bounds.max.y - b.bounds.min.y) / 2;
+          // Check if Force is touching this boundary segment
+          const onEdge = (Math.abs(dx) < halfW + 10 && Math.abs(dy) < halfH + 10);
+          if (onEdge && !boundaryBreachTimers[b.id]) {
+            boundaryBreachTimers[b.id] = { body: b, respawnAt: Date.now() + 2000 };
+            Composite.remove(world, b);
+          }
+        }
+      });
+
+      // Damage any Immovable it's crushing into
       allBodies.forEach(b => {
         if (b.label === 'Immovable') {
           const dx = body.position.x - b.position.x;
@@ -535,7 +563,7 @@ const Physics = (() => {
     const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
     const w = Math.max(Math.abs(x2 - x1) + 10, 12);
     const h = Math.max(Math.abs(y2 - y1) + 10, 12);
-    const wall = Bodies.rectangle(cx, cy, w, h, { isStatic: true, restitution: 0.2, friction: 0.9, label: 'Wall', collisionFilter: { category: 0x0002 } });
+    const wall = Bodies.rectangle(cx, cy, w, h, { isStatic: true, restitution: 0.2, friction: 0.9, label: 'Wall' });
     Composite.add(world, wall);
     return wall;
   }
@@ -543,7 +571,7 @@ const Physics = (() => {
   // ── Gravity Well ──
   function addGravityWell(x, y, strength) {
     const str = strength || 12;
-    const well = Bodies.circle(x, y, 16, { isStatic: true, label: 'GravityWell', collisionFilter: { group: -1, category: 0x0002 } });
+    const well = Bodies.circle(x, y, 16, { isStatic: true, label: 'GravityWell', collisionFilter: { group: -1 } });
     Composite.add(world, well);
     const handler = Events.on(engine, 'beforeUpdate', () => {
       const allBodies = Composite.allBodies(world);
@@ -581,6 +609,7 @@ const Physics = (() => {
     decayTimers = {};
     shockwaves = [];
     forceBodies = [];
+    boundaryBreachTimers = {};
     const bodies = Composite.allBodies(world).slice();
     bodies.forEach(b => {
       if (b.label !== 'Boundary') {
@@ -605,6 +634,36 @@ const Physics = (() => {
 
   // ── Render ──
   function update() {
+    // Respawn breached boundaries
+    const now = Date.now();
+    for (const id of Object.keys(boundaryBreachTimers)) {
+      const entry = boundaryBreachTimers[id];
+      if (now >= entry.respawnAt) {
+        // Recreate that boundary segment
+        const t = 60;
+        const opts = { isStatic: true, restitution: 0.3, label: 'Boundary' };
+        let newB = null;
+        // Figure out which edge it was from position
+        const x = entry.body.position.x;
+        const y = entry.body.position.y;
+        // Check proximity to each edge
+        const eps = 5;
+        if (Math.abs(y - (worldH + t/2)) < eps)
+          newB = Bodies.rectangle(worldW/2, worldH + t/2, worldW + t*2, t, opts);
+        else if (Math.abs(y - (-t/2)) < eps)
+          newB = Bodies.rectangle(worldW/2, -t/2, worldW + t*2, t, opts);
+        else if (Math.abs(x - (-t/2)) < eps)
+          newB = Bodies.rectangle(-t/2, worldH/2, t, worldH + t*2, opts);
+        else if (Math.abs(x - (worldW + t/2)) < eps)
+          newB = Bodies.rectangle(worldW + t/2, worldH/2, t, worldH + t*2, opts);
+
+        if (newB) {
+          boundaryBodies = boundaryBodies.map(b => b === entry.body ? newB : b);
+          Composite.add(world, newB);
+        }
+        delete boundaryBreachTimers[id];
+      }
+    }
     const bodies = Composite.allBodies(world);
 
     ctx.fillStyle = '#000';
