@@ -107,7 +107,7 @@ const Physics = (() => {
   let boundaryBodies = [];
   function createBoundaries() {
     const t = 60;
-    const opts = { isStatic: true, restitution: 0.3, label: 'Boundary' };
+    const opts = { isStatic: true, restitution: 0.3, label: 'Boundary', collisionFilter: { category: 0x0002 } };
     boundaryBodies = [
       Bodies.rectangle(worldW / 2, worldH + t / 2, worldW + t * 2, t, opts),
       Bodies.rectangle(-t / 2, worldH / 2, t, worldH + t * 2, opts),
@@ -295,7 +295,8 @@ const Physics = (() => {
   // ── Unstoppable Force ──
   function spawnForce(x, y) {
     const body = Bodies.circle(x, y, 24, {
-      restitution: 0, friction: 0, density: 0.05, label: 'Force', frictionAir: 0
+      restitution: 0, friction: 0, density: 0.05, label: 'Force', frictionAir: 0,
+      collisionFilter: { mask: 0x0001 } // only collides with default-category bodies
     });
     body._damage = 0; body._cracks = [];
     Composite.add(world, body);
@@ -311,7 +312,7 @@ const Physics = (() => {
           const dx = body.position.x - b.position.x;
           const dy = body.position.y - b.position.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 50) {
+          if (dist < 72) {
             b._damage = (b._damage || 0) + 0.005;
             if (Math.random() < 0.03 && b._cracks) {
               b._cracks.push({
@@ -534,7 +535,7 @@ const Physics = (() => {
     const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
     const w = Math.max(Math.abs(x2 - x1) + 10, 12);
     const h = Math.max(Math.abs(y2 - y1) + 10, 12);
-    const wall = Bodies.rectangle(cx, cy, w, h, { isStatic: true, restitution: 0.2, friction: 0.9, label: 'Wall' });
+    const wall = Bodies.rectangle(cx, cy, w, h, { isStatic: true, restitution: 0.2, friction: 0.9, label: 'Wall', collisionFilter: { category: 0x0002 } });
     Composite.add(world, wall);
     return wall;
   }
@@ -542,7 +543,7 @@ const Physics = (() => {
   // ── Gravity Well ──
   function addGravityWell(x, y, strength) {
     const str = strength || 12;
-    const well = Bodies.circle(x, y, 16, { isStatic: true, label: 'GravityWell', collisionFilter: { group: -1 } });
+    const well = Bodies.circle(x, y, 16, { isStatic: true, label: 'GravityWell', collisionFilter: { group: -1, category: 0x0002 } });
     Composite.add(world, well);
     const handler = Events.on(engine, 'beforeUpdate', () => {
       const allBodies = Composite.allBodies(world);
