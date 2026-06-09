@@ -1,6 +1,6 @@
 /**
  * Physics Playground — Physics Engine (Matter.js wrapper)
- * B&W pixel theme. Manages the Matter.js world, body creation, and rendering.
+ * B&W pixel theme. Destructible pixel shapes.
  */
 
 const Physics = (() => {
@@ -15,53 +15,39 @@ const Physics = (() => {
   let dragBody = null;
   let dragOffset = { x: 0, y: 0 };
 
+  const PIXEL = 6; // each pixel is 6×6 px
+
   function init(canvasEl) {
     try {
-    canvas = canvasEl;
-    ctx = canvas.getContext('2d');
+      canvas = canvasEl;
+      ctx = canvas.getContext('2d');
 
-    resize();
-    window.addEventListener('resize', resize);
+      resize();
+      window.addEventListener('resize', resize);
 
-    if (typeof Matter === 'undefined') {
-      throw new Error('Matter.js failed to load');
-    }
+      engine = Engine.create({
+        gravity: { x: 0, y: 0.4 }
+      });
+      world = engine.world;
 
-    engine = Engine.create({
-      gravity: { x: 0, y: 2 }
-    });
-    if (!engine) throw new Error('Engine.create returned undefined');
-    world = engine.world;
+      createBoundaries();
 
-    createBoundaries();
+      runner = Runner.create();
+      Runner.run(runner, engine);
 
-    runner = Runner.create();
-    Runner.run(runner, engine);
-
-    // Collision → white pixel burst
-    Events.on(engine, 'collisionStart', (event) => {
-      event.pairs.forEach(pair => {
-        [pair.bodyA, pair.bodyB].forEach(b => {
-          if (b.label === 'Shape' && !b.isStatic) {
-            Particles.spawn(b.position.x, b.position.y, 5);
-          }
+      Events.on(engine, 'collisionStart', (event) => {
+        event.pairs.forEach(pair => {
+          [pair.bodyA, pair.bodyB].forEach(b => {
+            if (b.label === 'Pixel' && !b.isStatic) {
+              Particles.spawn(b.position.x, b.position.y, 3);
+            }
+          });
         });
       });
-    });
 
-    return physics;
+      return physics;
     } catch(e) {
       console.error('Physics.init failed:', e.message, e.stack);
-      if (typeof Matter !== 'undefined' && Matter.Engine) {
-        // fallback: use Matter.js default renderer
-        const r = Matter.Render.create({
-          element: document.body,
-          engine: Matter.Engine.create({gravity:{x:0,y:2}}),
-          options: { background: '#000', wireframeBackground: '#000' }
-        });
-        Matter.Render.run(r);
-        Matter.Runner.run(Matter.Runner.create(), r.engine);
-      }
       return null;
     }
   }
@@ -91,7 +77,7 @@ const Physics = (() => {
     createBoundaries();
   }
 
-  // ── Drag support ──
+  // ── Drag ──
   function startDrag(x, y) {
     const body = getBodyAt(x, y);
     if (body) {
@@ -102,54 +88,65 @@ const Physics = (() => {
     }
     return false;
   }
-
   function moveDrag(x, y) {
     if (dragBody) {
       Body.setPosition(dragBody, { x: x + dragOffset.x, y: y + dragOffset.y });
       Body.setVelocity(dragBody, { x: 0, y: 0 });
     }
   }
-
-  function endDrag() {
-    dragBody = null;
-  }
-
+  function endDrag() { dragBody = null; }
   function isDragging() { return dragBody !== null; }
 
-  // ── Spawn ──
-  function spawnShape(x, y, type = 'circle', size) {
-    const s = size || 18 + Math.random() * 22;
-    const opts = {
-      restitution: 0.2,
-      friction: 0.3,
-      frictionAir: 0.015,
-      density: 0.003,
-      label: 'Shape'
-    };
+  // ── Spawn pixel shape ──
+  function spawnShape(x, y, type, gridSize) {
+    const gs = gridSize || 8;
+    const half = (gs * PIXEL) / 2;
+    const bodies = [];
 
-    let body;
+    for (let row = 0; row < gs; row++) {
+      for (let col = 0; col < gs; col++) {
+        const px = x - half + col * PIXEL + PIXEL / 2;
+        const py = y - half + row * PIXEL + PIXEL / 2;
+
+        if (!pixelInside(col, row, gs, type)) continue;
+
+        const body = Bodies.rectangle(px, py, PIXEL - 0.5, PIXEL - 0.5, {
+          restitution: 0.1,
+          friction: 0.5,
+          density: 0.003,
+          label: 'Pixel'
+        });
+        Composite.add(world, body);
+        bodies.push(body);
+      }
+    }
+    return bodies;
+  }
+
+  function pixelInside(col, row, gs, type) {
+    const nc = (col + 0.5) / gs; // 0..1 normalized col
+    const nr = (row + 0.5) / gs; // 0..1 normalized row
+
     switch (type) {
-      case 'circle':
-        body = Bodies.circle(x, y, s, opts);
-        break;
       case 'rect':
-        body = Bodies.rectangle(x, y, s * 1.8, s * 1.8, opts);
-        break;
+        return true;
+      case 'circle': {
+        const cx = (nc - 0.5) * 2;
+        const cy = (nr - 0.5) * 2;
+        return (cx * cx + cy * cy) < 1;
+      }
       case 'triangle':
-        body = Bodies.polygon(x, y, 3, s * 1.4, opts);
-        break;
+        // Upright isosceles triangle (apex at top center)
+        return nc >= (1 - nr) / 2 && nc <= (1 + nr) / 2;
+      default:
+        return true;
     }
-
-    if (body) {
-      Composite.add(world, body);
-    }
-    return body;
   }
 
   // ── Explosion ──
   function explode(x, y, force) {
     const f = force || 0.3;
-    const radius = 200;
+    const radius = 250;
     const bodies = Composite.allBodies(world);
     bodies.forEach(body => {
       if (body.isStatic || body.label === 'Boundary') return;
@@ -165,8 +162,8 @@ const Physics = (() => {
       }
     });
 
-    Particles.spawn(x, y, 60, { speed: 8 });
-    Particles.spawn(x, y, 40, { speed: 5 });
+    Particles.spawn(x, y, 80, { speed: 8 });
+    Particles.spawn(x, y, 50, { speed: 5 });
   }
 
   // ── Wall ──
@@ -175,14 +172,9 @@ const Physics = (() => {
     const cy = (y1 + y2) / 2;
     const w = Math.max(Math.abs(x2 - x1) + 10, 12);
     const h = Math.max(Math.abs(y2 - y1) + 10, 12);
-
     const wall = Bodies.rectangle(cx, cy, w, h, {
-      isStatic: true,
-      restitution: 0.2,
-      friction: 0.9,
-      label: 'Wall'
+      isStatic: true, restitution: 0.2, friction: 0.9, label: 'Wall'
     });
-
     Composite.add(world, wall);
     return wall;
   }
@@ -191,9 +183,7 @@ const Physics = (() => {
   function addGravityWell(x, y, strength) {
     const str = strength || 6;
     const well = Bodies.circle(x, y, 16, {
-      isStatic: true,
-      label: 'GravityWell',
-      collisionFilter: { group: -1 }
+      isStatic: true, label: 'GravityWell', collisionFilter: { group: -1 }
     });
     Composite.add(world, well);
 
@@ -220,9 +210,7 @@ const Physics = (() => {
   }
 
   function removeBody(body) {
-    if (body._handler) {
-      Events.off(engine, 'beforeUpdate', body._handler);
-    }
+    if (body._handler) Events.off(engine, 'beforeUpdate', body._handler);
     Composite.remove(world, body);
   }
 
@@ -274,21 +262,27 @@ const Physics = (() => {
     // Walls
     bodies.forEach(b => { if (b.label === 'Wall') drawBody(b, '#333', '#222'); });
 
-    // Shapes
-    bodies.forEach(b => { if (b.label === 'Shape' && !b.isStatic) drawBody(b, '#fff', '#555'); });
+    // Pixel shapes & dragged body highlight
+    bodies.forEach(b => {
+      if (b.label === 'Pixel') {
+        const isDragged = b === dragBody;
+        drawBody(b, isDragged ? '#aaa' : '#fff', '#555');
+      }
+    });
 
-    // Wall preview while drawing
+    // Wall preview
     const tool = typeof Tools !== 'undefined' ? Tools.getCurrentTool() : null;
     const drawing = typeof Tools !== 'undefined' ? Tools.isCurrentlyDrawing() : false;
     if (tool === 'wall' && drawing) {
       const start = Tools.getDrawStart();
       if (start) {
-        const x = Math.min(start.x, mouseX);
-        const y = Math.min(start.y, mouseY);
         ctx.strokeStyle = 'rgba(255,255,255,0.3)';
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 4]);
-        ctx.strokeRect(x, y, Math.abs(mouseX - start.x), Math.abs(mouseY - start.y));
+        ctx.strokeRect(
+          Math.min(start.x, mouseX), Math.min(start.y, mouseY),
+          Math.abs(mouseX - start.x), Math.abs(mouseY - start.y)
+        );
         ctx.setLineDash([]);
       }
     }
@@ -311,7 +305,7 @@ const Physics = (() => {
     ctx.fillStyle = fill;
     ctx.fill();
     ctx.strokeStyle = stroke;
-    ctx.lineWidth = body.label === 'Wall' ? 1 : 1.5;
+    ctx.lineWidth = 1;
     ctx.stroke();
   }
 
@@ -347,13 +341,8 @@ const Physics = (() => {
   function getWorld() { return world; }
 
   function togglePause() {
-    if (runner.enabled) {
-      Runner.stop(runner);
-      return false;
-    } else {
-      Runner.run(runner, engine);
-      return true;
-    }
+    if (runner.enabled) { Runner.stop(runner); return false; }
+    else { Runner.run(runner, engine); return true; }
   }
 
   const physics = {

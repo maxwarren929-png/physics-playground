@@ -78,6 +78,15 @@
     });
   });
 
+  // ── Pixel size slider ──
+  const sizeSlider = document.getElementById('pixelSize');
+  const sizeVal = document.getElementById('pixelSizeVal');
+  if (sizeSlider && sizeVal) {
+    sizeSlider.addEventListener('input', () => {
+      sizeVal.textContent = sizeSlider.value;
+    });
+  }
+
   // ── Explosion strength slider ──
   const expSlider = document.getElementById('explosionStrength');
   const expVal = document.getElementById('explosionStrengthVal');
