@@ -73,10 +73,37 @@ const Physics = (() => {
       Runner.run(runner, engine);
       Events.on(engine, 'collisionStart', (event) => {
         event.pairs.forEach(pair => {
-          [pair.bodyA, pair.bodyB].forEach(b => {
-            if ((b.label === 'Shape' || b.label === 'Fragment') && !b.isStatic)
+          const { bodyA, bodyB } = pair;
+
+          // Velocity-based crushing damage
+          const vx = bodyA.velocity.x - bodyB.velocity.x;
+          const vy = bodyA.velocity.y - bodyB.velocity.y;
+          const speed = Math.sqrt(vx * vx + vy * vy);
+          const impact = speed * Math.max(bodyA.mass, bodyB.mass) * 3;
+
+          const applyCrush = (b) => {
+            if ((b.label === 'Shape' || b.label === 'Ragdoll') && !b.isStatic && impact > 0.5) {
+              b._damage = (b._damage || 0) + impact;
+              if (!b._cracks) b._cracks = [];
+              // Add a crack from the impact
+              b._cracks.push({
+                x1: bodyA.position.x, y1: bodyA.position.y,
+                x2: b.position.x, y2: b.position.y
+              });
+              if (b._cracks.length > 20) b._cracks = b._cracks.slice(-20);
+              if (b._damage >= 1) {
+                // Shatter on heavy impact
+                const bt = bodyA.velocity.y > 0 ? bodyA : bodyB;
+                shatterBody(b, bt.position.x, bt.position.y, impact, 0);
+                return;
+              }
+            }
+            if ((b.label === 'Shape' || b.label === 'Fragment' || b.label === 'Ragdoll') && !b.isStatic)
               Particles.spawn(b.position.x, b.position.y, 1);
-          });
+          };
+
+          applyCrush(bodyA);
+          applyCrush(bodyB);
         });
       });
 
@@ -212,7 +239,12 @@ const Physics = (() => {
   function moveDrag(x, y) {
     if (dragBody) {
       const p = screenToWorld(x, y);
-      Body.setPosition(dragBody, { x: p.x + dragOffset.x, y: p.y + dragOffset.y });
+      let nx = p.x + dragOffset.x;
+      let ny = p.y + dragOffset.y;
+      // Clamp to world boundaries
+      nx = Math.max(20, Math.min(worldW - 20, nx));
+      ny = Math.max(20, Math.min(worldH - 20, ny));
+      Body.setPosition(dragBody, { x: nx, y: ny });
       Body.setVelocity(dragBody, { x: 0, y: 0 });
     }
   }
