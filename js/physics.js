@@ -15,7 +15,7 @@ const Physics = (() => {
   let dragBody = null;
   let dragOffset = { x: 0, y: 0 };
 
-  const PIXEL = 6; // each pixel is 6×6 px
+  const PIXEL = 7; // each pixel is 7×7 px (chunky pixel look)
 
   function init(canvasEl) {
     try {
@@ -110,10 +110,13 @@ const Physics = (() => {
 
         if (!pixelInside(col, row, gs, type)) continue;
 
-        const body = Bodies.rectangle(px, py, PIXEL - 0.5, PIXEL - 0.5, {
-          restitution: 0.1,
-          friction: 0.5,
-          density: 0.003,
+        const body = Bodies.rectangle(px, py, PIXEL - 0.2, PIXEL - 0.2, {
+          restitution: 0.02,
+          friction: 0.8,
+          frictionStatic: 0.9,
+          density: 0.006,
+          frictionAir: 0.008,
+          slop: 0.01,
           label: 'Pixel'
         });
         Composite.add(world, body);
@@ -262,11 +265,11 @@ const Physics = (() => {
     // Walls
     bodies.forEach(b => { if (b.label === 'Wall') drawBody(b, '#333', '#222'); });
 
-    // Pixel shapes & dragged body highlight
+    // Pixel shapes (no stroke = looks combined)
     bodies.forEach(b => {
       if (b.label === 'Pixel') {
         const isDragged = b === dragBody;
-        drawBody(b, isDragged ? '#aaa' : '#fff', '#555');
+        drawBodyNoStroke(b, isDragged ? '#aaa' : '#fff');
       }
     });
 
@@ -307,6 +310,19 @@ const Physics = (() => {
     ctx.strokeStyle = stroke;
     ctx.lineWidth = 1;
     ctx.stroke();
+  }
+
+  function drawBodyNoStroke(body, fill) {
+    // No stroke = pixels blend together visually
+    const verts = body.vertices;
+    ctx.beginPath();
+    ctx.moveTo(verts[0].x, verts[0].y);
+    for (let i = 1; i < verts.length; i++) {
+      ctx.lineTo(verts[i].x, verts[i].y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
   }
 
   function drawGravityWell(body) {
