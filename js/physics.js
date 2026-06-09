@@ -433,11 +433,19 @@ const Physics = (() => {
       const allBodies = Composite.allBodies(world);
       allBodies.forEach(body => {
         if (body === well || body.isStatic || body.label === 'Boundary') return;
-        const dx = well.position.x - body.position.x, dy = well.position.y - body.position.y;
+        const dx = well.position.x - body.position.x;
+        const dy = well.position.y - body.position.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 5 && dist < 350) {
-          const falloff = 1 - dist / 350;
-          Body.applyForce(body, body.position, { x: (dx / dist) * str * falloff, y: (dy / dist) * str * falloff });
+        if (dist > 8 && dist < 350) {
+          // Quadratic falloff + mass normalization + cap to prevent jitter
+          const norm = dist / 350;
+          const falloff = (1 - norm) * (1 - norm);
+          let force = (str / (body.mass || 1)) * falloff;
+          force = Math.min(force, 0.03); // hard cap to prevent freakout
+          Body.applyForce(body, body.position, {
+            x: (dx / dist) * force,
+            y: (dy / dist) * force
+          });
         }
       });
     });
