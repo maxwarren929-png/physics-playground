@@ -10,8 +10,8 @@ const Particles = (() => {
     const speed = opts.speed || 4;
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const v = speed * (0.2 + Math.random() * 0.8);
-      const life = 15 + Math.random() * 25;
+      const v = speed * (0.3 + Math.random() * 0.7);
+      const life = 25 + Math.random() * 35;
       particles.push({
         x, y,
         vx: Math.cos(angle) * v,
@@ -32,7 +32,7 @@ const Particles = (() => {
       p.x += p.vx;
       p.y += p.vy;
       p.vx *= 0.95;
-      p.vy += 0.08; // particle gravity
+      p.vy += 0.015; // particle gravity (matches weak engine gravity)
       p.life--;
 
       if (p.life <= 0) {

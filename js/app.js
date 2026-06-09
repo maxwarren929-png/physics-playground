@@ -87,6 +87,17 @@
     });
   }
 
+  // ── Glue toggle ──
+  const glueBtn = document.getElementById('glueToggle');
+  if (glueBtn) {
+    glueBtn.addEventListener('click', () => {
+      const on = !Physics.getGlueMode();
+      Physics.setGlueMode(on);
+      glueBtn.textContent = on ? 'GLUE:ON' : 'GLUE:OFF';
+      glueBtn.classList.toggle('active', on);
+    });
+  }
+
   // ── Explosion strength slider ──
   const expSlider = document.getElementById('explosionStrength');
   const expVal = document.getElementById('explosionStrengthVal');
