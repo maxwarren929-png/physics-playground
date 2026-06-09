@@ -5,14 +5,15 @@
 
 const Physics = (() => {
   const {
-    Engine, Runner, Bodies, Body, Composite, Events,
-    Mouse, MouseConstraint, Query
+    Engine, Runner, Bodies, Body, Composite, Events, Query
   } = Matter;
 
   let engine, world, runner;
   let canvas, ctx;
   let gravityWells = [];
   let mouseX = 0, mouseY = 0;
+  let dragBody = null;
+  let dragOffset = { x: 0, y: 0 };
 
   function init(canvasEl) {
     canvas = canvasEl;
@@ -21,7 +22,6 @@ const Physics = (() => {
     resize();
     window.addEventListener('resize', resize);
 
-    // Create engine - strong gravity to feel weighty
     engine = Engine.create({
       gravity: { x: 0, y: 2 }
     });
@@ -32,22 +32,10 @@ const Physics = (() => {
     runner = Runner.create();
     Runner.run(runner, engine);
 
-    // Mouse constraint for dragging shapes
-    const mouse = Mouse.create(canvas);
-    const mouseConstraint = MouseConstraint.create(engine, {
-      mouse,
-      constraint: {
-        stiffness: 0.2,
-        render: { visible: false }
-      }
-    });
-    Composite.add(world, mouseConstraint);
-
-    // Collision → black pixel burst
+    // Collision → white pixel burst
     Events.on(engine, 'collisionStart', (event) => {
       event.pairs.forEach(pair => {
-        const bodies = [pair.bodyA, pair.bodyB];
-        bodies.forEach(b => {
+        [pair.bodyA, pair.bodyB].forEach(b => {
           if (b.label === 'Shape' && !b.isStatic) {
             Particles.spawn(b.position.x, b.position.y, 5);
           }
@@ -61,7 +49,6 @@ const Physics = (() => {
   function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-    // Rebuild boundaries at new size
     rebuildBoundaries();
   }
 
@@ -83,6 +70,31 @@ const Physics = (() => {
     boundaryBodies.forEach(b => Composite.remove(world, b));
     createBoundaries();
   }
+
+  // ── Drag support ──
+  function startDrag(x, y) {
+    const body = getBodyAt(x, y);
+    if (body) {
+      dragBody = body;
+      dragOffset = { x: body.position.x - x, y: body.position.y - y };
+      Body.setStatic(body, false);
+      return true;
+    }
+    return false;
+  }
+
+  function moveDrag(x, y) {
+    if (dragBody) {
+      Body.setPosition(dragBody, { x: x + dragOffset.x, y: y + dragOffset.y });
+      Body.setVelocity(dragBody, { x: 0, y: 0 });
+    }
+  }
+
+  function endDrag() {
+    dragBody = null;
+  }
+
+  function isDragging() { return dragBody !== null; }
 
   // ── Spawn ──
   function spawnShape(x, y, type = 'circle', size) {
@@ -133,7 +145,6 @@ const Physics = (() => {
       }
     });
 
-    // Big black pixel burst
     Particles.spawn(x, y, 60, { speed: 8 });
     Particles.spawn(x, y, 40, { speed: 5 });
   }
@@ -174,7 +185,6 @@ const Physics = (() => {
         const dy = well.position.y - body.position.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > 5 && dist < 350) {
-          // Linear falloff: strongest at center, 0 at edge
           const falloff = 1 - dist / 350;
           Body.applyForce(body, body.position, {
             x: (dx / dist) * str * falloff,
@@ -215,22 +225,19 @@ const Physics = (() => {
   }
 
   function getObjectCount() {
-    const bodies = Composite.allBodies(world);
-    return bodies.filter(b => b.label !== 'Boundary').length;
+    return Composite.allBodies(world).filter(b => b.label !== 'Boundary').length;
   }
 
-  // ── Mouse tracking for wall preview ──
   function setMousePos(x, y) { mouseX = x; mouseY = y; }
 
   // ── Render ──
   function update() {
     const bodies = Composite.allBodies(world);
 
-    // Clear to black
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Subtle grid (very faint)
+    // Faint grid
     ctx.strokeStyle = 'rgba(255,255,255,0.03)';
     ctx.lineWidth = 1;
     const step = 32;
@@ -241,41 +248,34 @@ const Physics = (() => {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
     }
 
-    // 1) Gravity wells
-    bodies.forEach(b => {
-      if (b.label === 'GravityWell') drawGravityWell(b);
-    });
+    // Gravity wells
+    bodies.forEach(b => { if (b.label === 'GravityWell') drawGravityWell(b); });
 
-    // 2) Walls
-    bodies.forEach(b => {
-      if (b.label === 'Wall') drawBody(b, '#333', '#222');
-    });
+    // Walls
+    bodies.forEach(b => { if (b.label === 'Wall') drawBody(b, '#333', '#222'); });
 
-    // 3) Shapes
-    bodies.forEach(b => {
-      if (b.label === 'Shape' && !b.isStatic) drawBody(b, '#fff', '#555');
-    });
+    // Shapes
+    bodies.forEach(b => { if (b.label === 'Shape' && !b.isStatic) drawBody(b, '#fff', '#555'); });
 
-    // 4) Wall preview while drawing
-    const tool = Tools.getCurrentTool && Tools.getCurrentTool();
-    const drawing = Tools.isCurrentlyDrawing && Tools.isCurrentlyDrawing();
+    // Wall preview while drawing
+    const tool = typeof Tools !== 'undefined' ? Tools.getCurrentTool() : null;
+    const drawing = typeof Tools !== 'undefined' ? Tools.isCurrentlyDrawing() : false;
     if (tool === 'wall' && drawing) {
-      const start = Tools.getDrawStart && Tools.getDrawStart();
+      const start = Tools.getDrawStart();
       if (start) {
         const x = Math.min(start.x, mouseX);
         const y = Math.min(start.y, mouseY);
-        const w = Math.abs(mouseX - start.x);
-        const h = Math.abs(mouseY - start.y);
         ctx.strokeStyle = 'rgba(255,255,255,0.3)';
         ctx.lineWidth = 1;
-        ctx.strokeRect(x, y, w, h);
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(x, y, Math.abs(mouseX - start.x), Math.abs(mouseY - start.y));
+        ctx.setLineDash([]);
       }
     }
 
-    // 5) Particles
+    // Particles
     Particles.update();
 
-    // Counter
     const el = document.getElementById('objectCounter');
     if (el) el.textContent = `OBJECTS: ${getObjectCount()}`;
   }
@@ -300,7 +300,6 @@ const Physics = (() => {
     const y = body.position.y;
     const pulse = 0.6 + 0.4 * Math.sin(Date.now() / 400);
 
-    // Rings
     for (let i = 3; i >= 0; i--) {
       const r = 18 + i * 10 * pulse;
       ctx.beginPath();
@@ -310,7 +309,6 @@ const Physics = (() => {
       ctx.stroke();
     }
 
-    // Core glow
     const grad = ctx.createRadialGradient(x, y, 0, x, y, 18);
     grad.addColorStop(0, 'rgba(255,255,255,0.3)');
     grad.addColorStop(1, 'rgba(255,255,255,0)');
@@ -319,12 +317,10 @@ const Physics = (() => {
     ctx.fillStyle = grad;
     ctx.fill();
 
-    // Center pixel
     ctx.fillStyle = '#fff';
     ctx.fillRect(x - 1, y - 1, 2, 2);
   }
 
-  // ── Accessors ──
   function getCanvas() { return canvas; }
   function getCtx() { return ctx; }
   function getEngine() { return engine; }
@@ -344,7 +340,8 @@ const Physics = (() => {
     init, spawnShape, explode, drawWall, addGravityWell,
     removeBody, clearAll, getBodyAt, getObjectCount,
     update, getCanvas, getCtx, getEngine, getWorld,
-    togglePause, setMousePos
+    togglePause, setMousePos,
+    startDrag, moveDrag, endDrag, isDragging
   };
   return physics;
 })();

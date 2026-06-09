@@ -18,20 +18,38 @@
     };
   }
 
-  canvas.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
-    const p = getMousePos(e);
-    Tools.onMouseDown(p.x, p.y);
-  });
-
+  // Track mouse position always (for wall preview)
   canvas.addEventListener('mousemove', (e) => {
     const p = getMousePos(e);
     Tools.onMouseMove(p.x, p.y);
+
+    // Handle shape dragging
+    if (Physics.isDragging()) {
+      Physics.moveDrag(p.x, p.y);
+    }
+  });
+
+  canvas.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    const p = getMousePos(e);
+
+    // Try to start dragging a shape first
+    if (Tools.getCurrentTool() === 'spawn' && Physics.startDrag(p.x, p.y)) {
+      return; // Dragging, don't spawn
+    }
+
+    Tools.onMouseDown(p.x, p.y);
   });
 
   canvas.addEventListener('mouseup', (e) => {
     if (e.button !== 0) return;
     const p = getMousePos(e);
+
+    if (Physics.isDragging()) {
+      Physics.endDrag();
+      return;
+    }
+
     Tools.onMouseUp(p.x, p.y);
   });
 
@@ -112,4 +130,5 @@
 
   console.log('■ PHYSICS PLAYGROUND ■');
   console.log('[1] Spawn  [2] Explode  [3] Wall  [4] Gravity  [5] Erase  [Space] Pause');
+  console.log('Drag shapes with the Spawn tool');
 })();
