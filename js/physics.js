@@ -1,7 +1,15 @@
 /**
  * Physics Playground — Physics Engine (Matter.js wrapper)
- * Rigid shapes that crack then shatter into irregular polygon fragments.
- * Uses poly-decomp for polygon splitting.
+ *
+ * Spawns rigid shapes (circle, rect, triangle) that crack under
+ * explosion damage and shatter into irregular polygonal fragments
+ * via poly-decomp polygon splitting.
+ *
+ * Exports: physics object with init, spawnShape, explode, drawWall,
+ * addGravityWell, removeBody, clearAll, getBodyAt, getObjectCount,
+ * update, togglePause, and drag helpers.
+ *
+ * Dependencies: Matter.js (global), decomp (global/poly-decomp), Particles
  */
 
 const Physics = (() => {
