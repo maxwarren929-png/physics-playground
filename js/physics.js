@@ -14,6 +14,8 @@ const Physics = (() => {
   let mouseX = 0, mouseY = 0;
   let dragBody = null;
   let dragOffset = { x: 0, y: 0 };
+  let shardTimers = {}; // body.id -> expiry timestamp
+  let shardCleanupInterval = null;
 
   function init(canvasEl) {
     try {
@@ -29,6 +31,7 @@ const Physics = (() => {
       world = engine.world;
 
       createBoundaries();
+      startShardCleanup();
 
       runner = Runner.create();
       Runner.run(runner, engine);
@@ -130,6 +133,8 @@ const Physics = (() => {
     const f = force || 0.3;
     const radius = 250;
     const bodies = Composite.allBodies(world);
+    const toShatter = [];
+
     bodies.forEach(body => {
       if (body.isStatic || body.label === 'Boundary') return;
       const dx = body.position.x - x;
@@ -137,15 +142,89 @@ const Physics = (() => {
       const dist = Math.sqrt(dx * dx + dy * dy);
       if (dist < radius) {
         const power = (1 - dist / radius) * f;
-        Body.applyForce(body, body.position, {
-          x: (dx / (dist || 1)) * power,
-          y: (dy / (dist || 1)) * power
-        });
+
+        // Shatter shape bodies if the blast is strong enough
+        if (body.label === 'Shape' && power > 0.12) {
+          toShatter.push({ body, dx, dy, dist });
+        } else {
+          Body.applyForce(body, body.position, {
+            x: (dx / (dist || 1)) * power,
+            y: (dy / (dist || 1)) * power
+          });
+        }
       }
+    });
+
+    // Shatter collected bodies (spawn shards)
+    toShatter.forEach(({ body, dx, dy, dist }) => {
+      shatterBody(body, x, y, f, dist);
     });
 
     Particles.spawn(x, y, 25, { speed: 7 });
     Particles.spawn(x, y, 12, { speed: 4 });
+  }
+
+  // ── Shatter a shape into fragments ──
+  function shatterBody(body, explosionX, explosionY, force, dist) {
+    const pos = body.position;
+    const count = 5 + Math.floor(Math.random() * 4); // 5-8 shards
+    Composite.remove(world, body);
+
+    // Cap total shards in the world
+    const allBodies = Composite.allBodies(world);
+    let shardCount = Object.keys(shardTimers).length;
+    const maxShards = 80;
+
+    for (let i = 0; i < count; i++) {
+      if (shardCount >= maxShards) break;
+
+      const angle = (Math.PI * 2 / count) * i + Math.random() * 0.4;
+      const w = 4 + Math.random() * 10;
+      const h = 4 + Math.random() * 10;
+      const shard = Bodies.rectangle(
+        pos.x + Math.cos(angle) * 2,
+        pos.y + Math.sin(angle) * 2,
+        w, h,
+        {
+          density: 0.002,
+          friction: 0.4,
+          restitution: 0.2,
+          label: 'Shard',
+          collisionFilter: { group: -1 } // shards pass through each other
+        }
+      );
+
+      // Apply explosion velocity
+      const dx = pos.x - explosionX;
+      const dy = pos.y - explosionY;
+      const d = Math.sqrt(dx * dx + dy * dy) || 1;
+      const power = (1 - dist / 250) * force * 0.5;
+      Body.setVelocity(shard, {
+        x: (dx / d) * power * (0.8 + Math.random() * 0.6),
+        y: (dy / d) * power * (0.8 + Math.random() * 0.6) - 1.5
+      });
+      Body.setAngularVelocity(shard, (Math.random() - 0.5) * 0.2);
+
+      Composite.add(world, shard);
+      shardTimers[shard.id] = Date.now() + 3000 + Math.random() * 3000; // 3-6 seconds
+      shardCount++;
+    }
+  }
+
+  // Start periodic shard cleanup
+  function startShardCleanup() {
+    if (shardCleanupInterval) return;
+    shardCleanupInterval = setInterval(() => {
+      const now = Date.now();
+      const ids = Object.keys(shardTimers);
+      for (const id of ids) {
+        if (now > shardTimers[id]) {
+          const b = Composite.get(world, parseInt(id), 'body');
+          if (b) Composite.remove(world, b);
+          delete shardTimers[id];
+        }
+      }
+    }, 1000);
   }
 
   // ── Wall ──
@@ -197,6 +276,7 @@ const Physics = (() => {
   }
 
   function clearAll() {
+    shardTimers = {};
     const bodies = Composite.allBodies(world).slice();
     bodies.forEach(b => {
       if (b.label !== 'Boundary') {
@@ -248,6 +328,13 @@ const Physics = (() => {
     bodies.forEach(b => {
       if (b.label === 'Shape') {
         drawBody(b, b === dragBody ? '#aaa' : '#fff', '#555');
+      }
+    });
+
+    // Shards (breakable fragments)
+    bodies.forEach(b => {
+      if (b.label === 'Shard') {
+        drawBody(b, '#bbb', '#666');
       }
     });
 
