@@ -59,7 +59,7 @@ const Physics = (() => {
       resize();
       window.addEventListener('resize', resize);
 
-      engine = Engine.create({ gravity: { x: 0, y: 0.08 } });
+      engine = Engine.create({ gravity: { x: 0, y: 0.4 } });
       world = engine.world;
 
       applyWorldSize('small');

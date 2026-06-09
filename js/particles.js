@@ -32,7 +32,7 @@ const Particles = (() => {
       p.x += p.vx;
       p.y += p.vy;
       p.vx *= 0.95;
-      p.vy += 0.015; // particle gravity (matches weak engine gravity)
+      p.vy += 0.08; // particle gravity
       p.life--;
 
       if (p.life <= 0) {

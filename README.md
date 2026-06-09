@@ -100,7 +100,7 @@ Every explosion emits an expanding white ring that fades as it grows.
 
 | Property | Value |
 |---|---|
-| Gravity | `y: 0.08` (very weak — floaty) |
+| Gravity | `y: 0.4` (default) |
 | Shape density | `0.003` |
 | Shape restitution | `0.2` |
 | Shape friction | `0.4` |
