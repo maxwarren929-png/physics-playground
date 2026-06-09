@@ -10,7 +10,7 @@ A monochrome physics sandbox. Spawn rigid shapes, watch them crack under explosi
 
 | Key | Tool | Action |
 |---|---|---|
-| `1` | **SPAWN** | Click to place a shape. Circles, squares, triangles. Drag to move existing shapes. |
+| `1` | **SPAWN** | Click to place a shape. Circle, Square, Triangle, Ragdoll, Force, or Immovable. Drag to move existing shapes. |
 | `2` | **EXPLODE** | Click anywhere. Shapes near the blast crack; close enough and they shatter. |
 | `3` | **WALL** | Click & drag to draw a static wall. Bouncy, immovable. |
 | `4` | **GRAVITY** | Click to place a gravitational attractor. Pulses visually. |
@@ -187,6 +187,35 @@ The fracture system uses **poly-decomp.js** (schteppe), a polygon decomposition 
 | `decomp.removeCollinearPoints(polygon)` | Remove collinear vertices |
 | `decomp.quickDecomp(polygon)` | Fast concave→convex decomposition |
 | `decomp.decomp(polygon)` | Optimal (slow) concave→convex decomposition |
+
+
+---
+
+## RAGDOLL
+
+Select **Ragdoll** under Spawn and click to drop a stick figure. Six connected parts (head, torso, arms, legs) held together by constraints. They flop, fall, and can be blown apart by explosions.
+
+Each body part cracks and shatters independently. Constraint joints are drawn as faint white lines.
+
+---
+
+## UNSTOPPABLE FORCE vs IMMOVABLE OBJECT
+
+Two special bodies that demonstrate the classic physics paradox.
+
+### Force (→ Force)
+- **Indestructible** — immune to explosion damage
+- Constantly accelerates to the right with unlimited thrust
+- Passes through everything except the Immovable
+- Rendered with a thrust arrow indicator
+
+### Immovable (⎕ Immovable)
+- **Cannot be moved** — static, infinite mass
+- CAN be damaged by explosions AND by the Force pushing against it
+- Cracks appear as the Force grinds into it
+- When damage reaches 100%, it shatters into fragments
+
+**Try it:** Spawn both, place the Immovable in front of the Force, and watch the paradox play out.
 
 ---
 

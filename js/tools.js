@@ -14,7 +14,20 @@ const Tools = (() => {
   function handleSpawn(sx, sy) {
     const p = Physics.screenToWorld ? Physics.screenToWorld(sx, sy) : { x: sx, y: sy };
     const size = parseInt(document.getElementById('shapeSize').value) || 8;
-    Physics.spawnShape(p.x, p.y, currentShape, size);
+    switch (currentShape) {
+      case 'ragdoll':
+        Physics.spawnRagdoll(p.x, p.y, size);
+        break;
+      case 'force':
+        Physics.spawnForce(p.x, p.y);
+        break;
+      case 'immovable':
+        Physics.spawnImmovable(p.x, p.y);
+        break;
+      default:
+        Physics.spawnShape(p.x, p.y, currentShape, size);
+        break;
+    }
   }
 
   // ── Explosion ──

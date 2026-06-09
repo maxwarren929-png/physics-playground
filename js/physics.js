@@ -17,11 +17,12 @@
  */
 
 const Physics = (() => {
-  const { Engine, Runner, Bodies, Body, Composite, Events, Query, Vertices } = Matter;
+  const { Engine, Runner, Bodies, Body, Composite, Events, Query, Vertices, Constraint, Vector } = Matter;
 
   let engine, world, runner;
   let canvas, ctx;
   let gravityWells = [];
+  let forceBodies = [];
   let mouseX = 0, mouseY = 0;
   let dragBody = null;
   let dragOffset = { x: 0, y: 0 };
@@ -69,7 +70,6 @@ const Physics = (() => {
 
       runner = Runner.create();
       Runner.run(runner, engine);
-
       Events.on(engine, 'collisionStart', (event) => {
         event.pairs.forEach(pair => {
           [pair.bodyA, pair.bodyB].forEach(b => {
@@ -233,6 +233,115 @@ const Physics = (() => {
     return body;
   }
 
+  // ── Ragdoll ──
+  function spawnRagdoll(x, y, scale) {
+    const s = (scale || 8) * 3.5;
+    const opts = { restitution: 0.1, friction: 0.6, density: 0.002, label: 'Ragdoll' };
+    const parts = [];
+
+    // Head
+    const head = Bodies.circle(x, y - s * 1.6, s * 0.4, opts);
+    head._damage = 0; head._cracks = [];
+    parts.push(head);
+
+    // Torso
+    const torso = Bodies.rectangle(x, y, s * 0.7, s * 1.2, opts);
+    torso._damage = 0; torso._cracks = [];
+    parts.push(torso);
+
+    // Left Arm
+    const larm = Bodies.rectangle(x - s * 0.8, y - s * 0.3, s * 0.6, s * 0.25, opts);
+    larm._damage = 0; larm._cracks = [];
+    parts.push(larm);
+
+    // Right Arm
+    const rarm = Bodies.rectangle(x + s * 0.8, y - s * 0.3, s * 0.6, s * 0.25, opts);
+    rarm._damage = 0; rarm._cracks = [];
+    parts.push(rarm);
+
+    // Left Leg
+    const lleg = Bodies.rectangle(x - s * 0.25, y + s * 1.1, s * 0.25, s * 0.7, opts);
+    lleg._damage = 0; lleg._cracks = [];
+    parts.push(lleg);
+
+    // Right Leg
+    const rleg = Bodies.rectangle(x + s * 0.25, y + s * 1.1, s * 0.25, s * 0.7, opts);
+    rleg._damage = 0; rleg._cracks = [];
+    parts.push(rleg);
+
+    Composite.add(world, parts);
+
+    // Constraints (joints)
+    const constraints = [
+      { bodyA: head,  bodyB: torso, pointA: { x: 0, y: s * 0.4 },  pointB: { x: 0, y: -s * 0.6 }, stiffness: 0.6 },
+      { bodyA: torso, bodyB: larm,  pointA: { x: -s * 0.35, y: -s * 0.3 }, pointB: { x: s * 0.3, y: 0 },  stiffness: 0.4 },
+      { bodyA: torso, bodyB: rarm,  pointA: { x: s * 0.35, y: -s * 0.3 },  pointB: { x: -s * 0.3, y: 0 }, stiffness: 0.4 },
+      { bodyA: torso, bodyB: lleg,  pointA: { x: -s * 0.15, y: s * 0.6 },  pointB: { x: 0, y: -s * 0.35 }, stiffness: 0.5 },
+      { bodyA: torso, bodyB: rleg,  pointA: { x: s * 0.15, y: s * 0.6 },   pointB: { x: 0, y: -s * 0.35 }, stiffness: 0.5 },
+    ];
+
+    constraints.forEach(c => {
+      const con = Constraint.create({
+        bodyA: c.bodyA, bodyB: c.bodyB,
+        pointA: c.pointA, pointB: c.pointB,
+        stiffness: c.stiffness, damping: 0.1, length: 2
+      });
+      Composite.add(world, con);
+    });
+
+    return parts;
+  }
+
+  // ── Unstoppable Force ──
+  function spawnForce(x, y) {
+    const body = Bodies.circle(x, y, 24, {
+      restitution: 0, friction: 0, density: 0.05, label: 'Force', frictionAir: 0
+    });
+    body._damage = 0; body._cracks = [];
+    Composite.add(world, body);
+
+    const handler = Events.on(engine, 'beforeUpdate', () => {
+      // Constant thrust to the right
+      Body.applyForce(body, body.position, { x: 0.003 * body.mass, y: 0 });
+
+      // Damage any Immovable it's crushing into
+      const allBodies = Composite.allBodies(world);
+      allBodies.forEach(b => {
+        if (b.label === 'Immovable') {
+          const dx = body.position.x - b.position.x;
+          const dy = body.position.y - b.position.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 50) {
+            b._damage = (b._damage || 0) + 0.005;
+            if (Math.random() < 0.03 && b._cracks) {
+              b._cracks.push({
+                x1: body.position.x, y1: body.position.y,
+                x2: b.position.x, y2: b.position.y
+              });
+              if (b._cracks.length > 20) b._cracks = b._cracks.slice(-20);
+            }
+            if (b._damage >= 1) {
+              shatterBody(b, b.position.x, b.position.y, 0.5, 0);
+            }
+          }
+        }
+      });
+    });
+    body._handler = handler;
+    forceBodies.push(body);
+    return body;
+  }
+
+  // ── Immovable Object ──
+  function spawnImmovable(x, y) {
+    const body = Bodies.rectangle(x, y, 80, 80, {
+      isStatic: true, restitution: 1, friction: 1, label: 'Immovable', density: 1
+    });
+    body._damage = 0; body._cracks = [];
+    Composite.add(world, body);
+    return body;
+  }
+
   // ── Explosion ──
   function explode(x, y, force) {
     const f = force || 0.3;
@@ -241,16 +350,22 @@ const Physics = (() => {
     const toShatter = [];
 
     bodies.forEach(body => {
-      if (body.isStatic || body.label === 'Boundary' || body.label === 'GravityWell') return;
+      if (body.label === 'Boundary' || body.label === 'GravityWell') return;
+      if (body.isStatic && body.label !== 'Immovable') return;
+
       const dx = body.position.x - x, dy = body.position.y - y;
       const dist = Math.sqrt(dx * dx + dy * dy);
       if (dist < radius) {
         const power = (1 - dist / radius) * f;
-        if (body.label === 'Shape') {
+
+        if (body.label === 'Force') {
+          // Force is immune to damage, still gets pushed around
+          Body.applyForce(body, body.position, { x: (dx / (dist || 1)) * power * 2, y: (dy / (dist || 1)) * power * 2 });
+        } else if (body.label === 'Shape' || body.label === 'Ragdoll' || body.label === 'Immovable') {
           body._damage = (body._damage || 0) + power * 2.5;
           addCracks(body, x, y, power);
           if (body._damage >= 1) toShatter.push({ body, dist, power, dx, dy });
-          else Body.applyForce(body, body.position, { x: (dx / (dist || 1)) * power, y: (dy / (dist || 1)) * power });
+          else if (body.label !== 'Immovable') Body.applyForce(body, body.position, { x: (dx / (dist || 1)) * power, y: (dy / (dist || 1)) * power });
         } else if (body.label === 'Fragment') {
           body._damage = (body._damage || 0) + power * 3;
           if (body._damage >= 1) toShatter.push({ body, dist, power, dx, dy });
@@ -457,12 +572,14 @@ const Physics = (() => {
   function removeBody(body) {
     if (body._handler) Events.off(engine, 'beforeUpdate', body._handler);
     delete decayTimers[body.id];
+    forceBodies = forceBodies.filter(b => b !== body);
     Composite.remove(world, body);
   }
 
   function clearAll() {
     decayTimers = {};
     shockwaves = [];
+    forceBodies = [];
     const bodies = Composite.allBodies(world).slice();
     bodies.forEach(b => {
       if (b.label !== 'Boundary') {
@@ -529,6 +646,74 @@ const Physics = (() => {
     bodies.forEach(b => {
       if (b.label === 'Shape') {
         drawBody(b, b._damage > 0 ? '#eee' : '#fff', '#555');
+        if (b._cracks && b._cracks.length > 0) {
+          ctx.strokeStyle = `rgba(0,0,0,${0.3 + b._damage * 0.5})`;
+          ctx.lineWidth = 1;
+          b._cracks.forEach(c => { ctx.beginPath(); ctx.moveTo(c.x1, c.y1); ctx.lineTo(c.x2, c.y2); ctx.stroke(); });
+        }
+      }
+    });
+
+    // Ragdolls (with constraints)
+    bodies.forEach(b => {
+      if (b.label === 'Ragdoll') {
+        drawBody(b, b._damage > 0 ? '#eee' : '#fff', '#888');
+        if (b._cracks && b._cracks.length > 0) {
+          ctx.strokeStyle = `rgba(0,0,0,${0.3 + b._damage * 0.5})`;
+          ctx.lineWidth = 1;
+          b._cracks.forEach(c => { ctx.beginPath(); ctx.moveTo(c.x1, c.y1); ctx.lineTo(c.x2, c.y2); ctx.stroke(); });
+        }
+      }
+    });
+
+    // Ragdoll constraint lines
+    const constraints = Composite.allConstraints(world);
+    constraints.forEach(con => {
+      if (!con.bodyA || !con.bodyB) return;
+      const ax = con.bodyA.position.x + (con.pointA ? con.pointA.x : 0);
+      const ay = con.bodyA.position.y + (con.pointA ? con.pointA.y : 0);
+      const bx = con.bodyB.position.x + (con.pointB ? con.pointB.x : 0);
+      const by = con.bodyB.position.y + (con.pointB ? con.pointB.y : 0);
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    });
+
+    // Force bodies
+    bodies.forEach(b => {
+      if (b.label === 'Force') {
+        drawBody(b, '#fff', '#aaa');
+        // Draw arrow indicating thrust direction
+        const arrowLen = 30;
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(b.position.x + 24, b.position.y);
+        ctx.lineTo(b.position.x + 24 + arrowLen, b.position.y);
+        ctx.stroke();
+        // Arrowhead
+        ctx.beginPath();
+        ctx.moveTo(b.position.x + 24 + arrowLen, b.position.y);
+        ctx.lineTo(b.position.x + 24 + arrowLen - 8, b.position.y - 5);
+        ctx.moveTo(b.position.x + 24 + arrowLen, b.position.y);
+        ctx.lineTo(b.position.x + 24 + arrowLen - 8, b.position.y + 5);
+        ctx.stroke();
+      }
+    });
+
+    // Immovable bodies
+    bodies.forEach(b => {
+      if (b.label === 'Immovable') {
+        drawBody(b, '#fff', '#fff');
+        // Additional inner border
+        const verts = b.vertices;
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        const cx = b.position.x, cy = b.position.y;
+        const w = 60, h = 60;
+        ctx.rect(cx - w/2, cy - h/2, w, h);
+        ctx.stroke();
         if (b._cracks && b._cracks.length > 0) {
           ctx.strokeStyle = `rgba(0,0,0,${0.3 + b._damage * 0.5})`;
           ctx.lineWidth = 1;
@@ -613,12 +798,21 @@ const Physics = (() => {
   function getCtx() { return ctx; }
   function getEngine() { return engine; }
   function getWorld() { return world; }
-  function togglePause() { if (runner.enabled) { Runner.stop(runner); return false; } else { Runner.run(runner, engine); return true; } }
+  function togglePause() {
+    if (runner.enabled) { Runner.stop(runner); return false; }
+    else {
+      // Re-create runner to avoid stale state
+      runner = Runner.create();
+      Runner.run(runner, engine);
+      return true;
+    }
+  }
   function getWorldW() { return worldW; }
   function getWorldH() { return worldH; }
 
   const physics = {
-    init, spawnShape, explode, drawWall, addGravityWell,
+    init, spawnShape, spawnRagdoll, spawnForce, spawnImmovable,
+    explode, drawWall, addGravityWell,
     removeBody, clearAll, getBodyAt, getObjectCount,
     update, getCanvas, getCtx, getEngine, getWorld,
     togglePause, setMousePos,
