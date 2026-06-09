@@ -17,10 +17,11 @@
  */
 
 const Physics = (() => {
-  const { Engine, Runner, Bodies, Body, Composite, Events, Query, Vertices, Constraint, Vector } = Matter;
+  const { Engine, Bodies, Body, Composite, Events, Query, Vertices, Constraint, Vector } = Matter;
 
-  let engine, world, runner;
+  let engine, world;
   let canvas, ctx;
+  let paused = false;
   let gravityWells = [];
   let forceBodies = [];
   let boundaryBreachTimers = {};
@@ -71,8 +72,7 @@ const Physics = (() => {
 
       startDecayCleanup();
 
-      runner = Runner.create();
-      Runner.run(runner, engine);
+      paused = false;
       Events.on(engine, 'collisionStart', (event) => {
         event.pairs.forEach(pair => {
           const { bodyA, bodyB } = pair;
@@ -728,6 +728,7 @@ const Physics = (() => {
   }
 
   function clearAll() {
+    paused = false;
     decayTimers = {};
     shockwaves = [];
     forceBodies = [];
@@ -756,6 +757,9 @@ const Physics = (() => {
 
   // ── Render ──
   function update() {
+    // Manually step the engine (no Runner, more reliable pause/resume)
+    if (!paused) Engine.update(engine, 1000 / 60);
+
     // Respawn breached boundaries
     const now = Date.now();
     for (const id of Object.keys(boundaryBreachTimers)) {
@@ -1029,13 +1033,8 @@ const Physics = (() => {
   function getEngine() { return engine; }
   function getWorld() { return world; }
   function togglePause() {
-    if (runner.enabled) { Runner.stop(runner); return false; }
-    else {
-      // Re-create runner to avoid stale state
-      runner = Runner.create();
-      Runner.run(runner, engine);
-      return true;
-    }
+    paused = !paused;
+    return !paused;
   }
   function getWorldW() { return worldW; }
   function getWorldH() { return worldH; }
