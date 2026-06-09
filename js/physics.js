@@ -69,7 +69,7 @@ const Physics = (() => {
   function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-    rebuildBoundaries();
+    if (engine) rebuildBoundaries();
   }
 
   let boundaryBodies = [];
