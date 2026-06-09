@@ -10,11 +10,12 @@ A monochrome physics sandbox. Spawn rigid shapes, watch them crack under explosi
 
 | Key | Tool | Action |
 |---|---|---|
-| `1` | **SPAWN** | Click to place a shape. Circle, Square, Triangle, Ragdoll, Force, or Immovable. Drag to move existing shapes. |
+| `1` | **SPAWN** | Click to place a shape. Circle, Square, Triangle, Ragdoll, Force, or Immovable. Drag to launch. |
 | `2` | **EXPLODE** | Click anywhere. Shapes near the blast crack; close enough and they shatter. |
 | `3` | **WALL** | Click & drag to draw a static wall. Bouncy, immovable. |
-| `4` | **GRAVITY** | Click to place a gravitational attractor. Pulses visually. |
+| `4` | **GRAVITY** | Click to place a gravity well (or black hole). |
 | `5` | **ERASE** | Click a shape, fragment, or wall to remove it. |
+| `6` | **SPRING** | Click a body → click another body (or empty space) to connect with a stretchy constraint. |
 | `Space` | **PAUSE** | Freeze / resume all physics. |
 | `W` | **WIND** | Toggle a constant directional wind force. |
 | `X` | **WORLD SIZE** | Cycle through Small / Medium / Large. |
@@ -219,6 +220,44 @@ Two special bodies that demonstrate the classic physics paradox.
 
 ---
 
+## SLINGSHOT LAUNCH
+
+Drag any movable body away from its original position and release — it **slingshots back** toward where it started. The further you pull, the harder it launches.
+
+A dashed pull-back line shows the trajectory while dragging. Works with any regular shape, ragdoll part, or fragment.
+
+---
+
+## BLACK HOLE
+
+Select **Hole** under the Gravity tool. A super-powered gravity well that **destroys objects** on contact.
+
+- 2× pull force, 450px range (vs 350px for regular wells)
+- Objects entering the event horizon are vaporized with particles
+- Rendered with pulsating rings and bright center
+
+---
+
+## SPRING TOOL (6)
+
+Click a body → click another body (or empty space) to connect them with a stretchy constraint.
+
+- **Body → Body**: Spring connecting two objects
+- **Body → Space**: Anchors the body to a fixed point
+- Stiffness slider: 0.01 (stretchy) → 0.50 (rigid)
+- Selected body gets a dashed highlight outline
+- Constraints draw as white lines
+
+Use springs for pendulums, bridges, wrecking balls, or floppy ragdolls.
+
+---
+
+## VELOCITY CRUSHING
+
+Falling heavy objects **crush** whatever's below them. Collision speed × mass translates into real damage. Drop a large square on a ragdoll and watch it crack and shatter on impact.
+
+---
+
 ## DEVELOPMENT
 
 ```bash
@@ -248,6 +287,7 @@ No build step, no bundler, no dependencies. Just vanilla JS loaded via `<script>
 | `3` | Wall tool |
 | `4` | Gravity well tool |
 | `5` | Erase tool |
+| `6` | Spring tool |
 | `Space` | Pause / resume |
 | `W` | Toggle wind |
 | `X` | Cycle world size |

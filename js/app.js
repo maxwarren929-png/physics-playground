@@ -132,6 +132,25 @@
     gravSlider.addEventListener('input', () => { gravVal.textContent = parseFloat(gravSlider.value).toFixed(1); });
   }
 
+  // ── Gravity mode (well / hole) ──
+  document.querySelectorAll('[data-gravity]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-gravity]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      Tools.setGravityMode(btn.dataset.gravity);
+    });
+  });
+
+  // ── Spring stiffness slider ──
+  const springSlider = document.getElementById('springStiffness');
+  const springVal = document.getElementById('springStiffnessVal');
+  if (springSlider && springVal) {
+    springSlider.addEventListener('input', () => {
+      springVal.textContent = parseFloat(springSlider.value).toFixed(2);
+      Tools.setSpringStiffness(parseFloat(springSlider.value));
+    });
+  }
+
   // ── World size ──
   const worldBtns = document.querySelectorAll('[data-worldsize]');
   worldBtns.forEach(btn => {
@@ -182,7 +201,7 @@
     const key = e.key;
     const map = {
       '1': 'spawn', '2': 'explode', '3': 'wall',
-      '4': 'gravity', '5': 'erase',
+      '4': 'gravity', '5': 'erase', '6': 'spring',
       ' ': 'pause', 'w': 'wind',
       'x': 'worldsize', 'r': 'resetcam'
     };
@@ -219,7 +238,7 @@
   loop();
 
   console.log('■ PHYSICS PLAYGROUND ■');
-  console.log('[1] Spawn  [2] Explode  [3] Wall  [4] Gravity  [5] Erase');
+  console.log('[1] Spawn  [2] Explode  [3] Wall  [4] Gravity  [5] Erase  [6] Spring');
   console.log('[Space] Pause  [W] Wind  [X] World size  [R] Reset camera');
   console.log('Scroll to zoom · Right-click drag to pan');
 })();

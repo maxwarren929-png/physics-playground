@@ -27,6 +27,8 @@ const Physics = (() => {
   let mouseX = 0, mouseY = 0;
   let dragBody = null;
   let dragOffset = { x: 0, y: 0 };
+  let dragStartPos = null;
+  let springBodyA = null;
   let decayTimers = {};
   let decayInterval = null;
 
@@ -224,13 +226,14 @@ const Physics = (() => {
     if (engine) rebuildBoundaries();
   }
 
-  // ── Drag ──
+  // ── Drag + Slingshot ──
   function startDrag(x, y) {
     const p = screenToWorld(x, y);
     const body = getBodyAt(p.x, p.y);
     if (body) {
       dragBody = body;
       dragOffset = { x: body.position.x - p.x, y: body.position.y - p.y };
+      dragStartPos = { x: body.position.x, y: body.position.y };
       Body.setStatic(body, false);
       return true;
     }
@@ -241,14 +244,26 @@ const Physics = (() => {
       const p = screenToWorld(x, y);
       let nx = p.x + dragOffset.x;
       let ny = p.y + dragOffset.y;
-      // Clamp to world boundaries
       nx = Math.max(20, Math.min(worldW - 20, nx));
       ny = Math.max(20, Math.min(worldH - 20, ny));
       Body.setPosition(dragBody, { x: nx, y: ny });
       Body.setVelocity(dragBody, { x: 0, y: 0 });
     }
   }
-  function endDrag() { dragBody = null; }
+  function endDrag() {
+    if (dragBody && dragStartPos) {
+      // Slingshot launch
+      const dx = dragStartPos.x - dragBody.position.x;
+      const dy = dragStartPos.y - dragBody.position.y;
+      const pull = Math.sqrt(dx * dx + dy * dy);
+      if (pull > 15) {
+        const scale = Math.min(pull / 80, 3);
+        Body.setVelocity(dragBody, { x: dx * scale, y: dy * scale });
+      }
+    }
+    dragBody = null;
+    dragStartPos = null;
+  }
   function isDragging() { return dragBody !== null; }
 
   // ── Spawn ──
@@ -630,6 +645,81 @@ const Physics = (() => {
     return well;
   }
 
+  // ── Black Hole ──
+  function addBlackHole(x, y, strength) {
+    const str = strength || 15;
+    const well = Bodies.circle(x, y, 24, { isStatic: true, label: 'BlackHole', collisionFilter: { group: -1 } });
+    Composite.add(world, well);
+    const range = 450;
+    const handler = Events.on(engine, 'beforeUpdate', () => {
+      const allBodies = Composite.allBodies(world);
+      allBodies.forEach(body => {
+        if (body === well || body.isStatic || body.label === 'Boundary') return;
+        const dx = well.position.x - body.position.x;
+        const dy = well.position.y - body.position.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 5 && dist < range) {
+          const norm = dist / range;
+          const falloff = (1 - norm) * (1 - norm);
+          let force = (str * 2 / (body.mass || 1)) * falloff;
+          force = Math.min(force, 0.08);
+          Body.applyForce(body, body.position, {
+            x: (dx / dist) * force,
+            y: (dy / dist) * force
+          });
+          // Destroy objects that enter the event horizon
+          if (dist < 28) {
+            if (body._handler) Events.off(engine, 'beforeUpdate', body._handler);
+            delete decayTimers[body.id];
+            forceBodies = forceBodies.filter(b => b !== body);
+            Particles.spawn(body.position.x, body.position.y, 12, { speed: 6 });
+            Composite.remove(world, body);
+          }
+        }
+      });
+    });
+    well._handler = handler;
+    gravityWells.push(well);
+    return well;
+  }
+
+  // ── Spring Tool ──
+  function getSpringBodyA() { return springBodyA; }
+  function setSpringBodyA(body) { springBodyA = body; }
+  function clearSpringBodyA() { springBodyA = null; }
+
+  function addSpringConstraint(bodyA, bodyB, stiffness) {
+    const con = Constraint.create({
+      bodyA: bodyA,
+      pointA: { x: 0, y: 0 },
+      bodyB: bodyB,
+      pointB: { x: 0, y: 0 },
+      stiffness: stiffness || 0.05,
+      damping: 0.05,
+      length: null // auto-calculated from distance
+    });
+    Composite.add(world, con);
+    return con;
+  }
+
+  function addAnchoredSpring(bodyA, worldX, worldY, stiffness) {
+    // Create a static point body as anchor
+    const anchor = Bodies.circle(worldX, worldY, 4, {
+      isStatic: true, label: 'Anchor', collisionFilter: { group: -1 }
+    });
+    Composite.add(world, anchor);
+    const con = Constraint.create({
+      bodyA: bodyA,
+      pointA: { x: 0, y: 0 },
+      bodyB: anchor,
+      pointB: { x: 0, y: 0 },
+      stiffness: stiffness || 0.05,
+      damping: 0.05
+    });
+    Composite.add(world, con);
+    return con;
+  }
+
   function removeBody(body) {
     if (body._handler) Events.off(engine, 'beforeUpdate', body._handler);
     delete decayTimers[body.id];
@@ -730,6 +820,54 @@ const Physics = (() => {
 
     // Gravity wells
     bodies.forEach(b => { if (b.label === 'GravityWell') drawGravityWell(b); });
+
+    // Black holes
+    bodies.forEach(b => {
+      if (b.label === 'BlackHole') {
+        const x = b.position.x, y = b.position.y;
+        const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 300);
+        ctx.strokeStyle = `rgba(255,255,255,${0.06 * pulse})`;
+        ctx.lineWidth = 1;
+        for (let i = 5; i >= 0; i--) {
+          const r = 28 + i * 12 * pulse;
+          ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        const grad = ctx.createRadialGradient(x, y, 0, x, y, 28);
+        grad.addColorStop(0, 'rgba(255,255,255,0.5)');
+        grad.addColorStop(0.5, 'rgba(255,255,255,0.15)');
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.beginPath(); ctx.arc(x, y, 28, 0, Math.PI * 2);
+        ctx.fillStyle = grad; ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+
+    // Spring body A highlight
+    if (springBodyA) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6 / camera.zoom, 4 / camera.zoom]);
+      const verts = springBodyA.vertices;
+      ctx.beginPath(); ctx.moveTo(verts[0].x, verts[0].y);
+      for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i].x, verts[i].y);
+      ctx.closePath(); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Slingshot pull-back line
+    if (dragBody && dragStartPos) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4 / camera.zoom, 4 / camera.zoom]);
+      ctx.beginPath();
+      ctx.moveTo(dragBody.position.x, dragBody.position.y);
+      ctx.lineTo(dragStartPos.x, dragStartPos.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     // Walls
     bodies.forEach(b => { if (b.label === 'Wall') drawBody(b, '#333', '#222'); });
@@ -904,7 +1042,9 @@ const Physics = (() => {
 
   const physics = {
     init, spawnShape, spawnRagdoll, spawnForce, spawnImmovable,
-    explode, drawWall, addGravityWell,
+    explode, drawWall, addGravityWell, addBlackHole,
+    addSpringConstraint, addAnchoredSpring,
+    getSpringBodyA, setSpringBodyA, clearSpringBodyA,
     removeBody, clearAll, getBodyAt, getObjectCount,
     update, getCanvas, getCtx, getEngine, getWorld,
     togglePause, setMousePos,

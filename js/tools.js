@@ -9,6 +9,8 @@ const Tools = (() => {
   let isDrawing = false;
   let drawStart = null;
   let mouseX = 0, mouseY = 0;
+  let gravityMode = 'well'; // 'well' or 'hole'
+  let springStiffness = 0.05;
 
   // ── Spawn ──
   function handleSpawn(sx, sy) {
@@ -52,11 +54,15 @@ const Tools = (() => {
     drawStart = null;
   }
 
-  // ── Gravity Well ──
+  // ── Gravity ──
   function handleGravity(sx, sy) {
     const p = Physics.screenToWorld ? Physics.screenToWorld(sx, sy) : { x: sx, y: sy };
     const strength = parseFloat(document.getElementById('gravityStrength').value);
-    Physics.addGravityWell(p.x, p.y, strength);
+    if (gravityMode === 'hole') {
+      Physics.addBlackHole(p.x, p.y, strength);
+    } else {
+      Physics.addGravityWell(p.x, p.y, strength);
+    }
   }
 
   // ── Erase ──
@@ -64,6 +70,29 @@ const Tools = (() => {
     const p = Physics.screenToWorld ? Physics.screenToWorld(sx, sy) : { x: sx, y: sy };
     const body = Physics.getBodyAt(p.x, p.y);
     if (body) Physics.removeBody(body);
+  }
+
+  // ── Spring ──
+  function handleSpring(sx, sy) {
+    const p = Physics.screenToWorld ? Physics.screenToWorld(sx, sy) : { x: sx, y: sy };
+    const bodyA = Physics.getSpringBodyA();
+
+    if (bodyA) {
+      // Second click — check if we hit another body or empty space
+      const bodyB = Physics.getBodyAt(p.x, p.y);
+      if (bodyB && bodyB !== bodyA) {
+        Physics.addSpringConstraint(bodyA, bodyB, springStiffness);
+      } else {
+        Physics.addAnchoredSpring(bodyA, p.x, p.y, springStiffness);
+      }
+      Physics.clearSpringBodyA();
+    } else {
+      // First click — select body A
+      const hit = Physics.getBodyAt(p.x, p.y);
+      if (hit) {
+        Physics.setSpringBodyA(hit);
+      }
+    }
   }
 
   // ── Dispatch ──
@@ -74,6 +103,7 @@ const Tools = (() => {
       case 'wall':    handleWallStart(x, y); break;
       case 'gravity': handleGravity(x, y); break;
       case 'erase':   handleErase(x, y); break;
+      case 'spring':  handleSpring(x, y); break;
     }
   }
 
@@ -90,9 +120,9 @@ const Tools = (() => {
   // ── Tool switching ──
   function setTool(tool) {
     currentTool = tool;
-    // Cancel any wall draw in progress
     isDrawing = false;
     drawStart = null;
+    if (tool !== 'spring') Physics.clearSpringBodyA();
 
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
     const btn = document.querySelector(`[data-tool="${tool}"]`);
@@ -104,7 +134,7 @@ const Tools = (() => {
 
     const canvas = Physics.getCanvas();
     if (canvas) {
-      const cursors = { spawn: 'crosshair', explode: 'cell', wall: 'copy', gravity: 'grab', erase: 'not-allowed' };
+      const cursors = { spawn: 'crosshair', explode: 'cell', wall: 'copy', gravity: 'grab', erase: 'not-allowed', spring: 'pointer' };
       canvas.style.cursor = cursors[tool] || 'default';
     }
   }
@@ -115,6 +145,10 @@ const Tools = (() => {
   function getCurrentTool() { return currentTool; }
   function getCurrentShape() { return currentShape; }
   function setCurrentShape(shape) { currentShape = shape; }
+  function getGravityMode() { return gravityMode; }
+  function setGravityMode(mode) { gravityMode = mode; }
+  function getSpringStiffness() { return springStiffness; }
+  function setSpringStiffness(s) { springStiffness = s; }
   function getMouseX() { return mouseX; }
   function getMouseY() { return mouseY; }
 
@@ -122,6 +156,8 @@ const Tools = (() => {
     onMouseDown, onMouseMove, onMouseUp, setTool,
     isCurrentlyDrawing, getDrawStart, getCurrentTool,
     getCurrentShape, setCurrentShape,
+    getGravityMode, setGravityMode,
+    getSpringStiffness, setSpringStiffness,
     getMouseX, getMouseY
   };
 })();
