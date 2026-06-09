@@ -62,8 +62,27 @@
     </div>
   </div>
 
-  <!-- Object counter -->
-  <div id="objectCounter">OBJECTS: 0</div>
+  <!-- View options bar -->
+  <div id="viewOptions">
+    <span class="opt-label">WORLD:</span>
+    <button class="opt-btn active" data-worldsize="small">S</button>
+    <button class="opt-btn" data-worldsize="medium">M</button>
+    <button class="opt-btn" data-worldsize="large">L</button>
+    <div class="toolbar-divider-v"></div>
+    <button class="opt-btn" id="windToggle">WIND:OFF</button>
+    <button class="opt-btn" id="resetCamBtn">&#x25CB; RESET</button>
+  </div>
+
+  <!-- Key hints -->
+  <div id="keyHints">
+    <span>Z:Zoom</span><span>RClick:Pan</span><span>W:Wind</span><span>X:World</span><span>R:Cam</span><span>Space:Pause</span>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <span id="objectCounter">OBJECTS: 0</span>
+    <span id="fpsDisplay"></span>
+  </div>
 
   <script>
   window.onerror = function(msg, url, line, col, err) {

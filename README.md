@@ -16,6 +16,11 @@ A monochrome physics sandbox. Spawn rigid shapes, watch them crack under explosi
 | `4` | **GRAVITY** | Click to place a gravitational attractor. Pulses visually. |
 | `5` | **ERASE** | Click a shape, fragment, or wall to remove it. |
 | `Space` | **PAUSE** | Freeze / resume all physics. |
+| `W` | **WIND** | Toggle a constant directional wind force. |
+| `X` | **WORLD SIZE** | Cycle through Small / Medium / Large. |
+| `R` | **RESET CAM** | Reset zoom and pan to fit the world. |
+| Scroll | **ZOOM** | Zoom in / out centered on the cursor. |
+| RClick | **PAN** | Right-click drag to pan the view. |
 | `C` | **CLEAR** | Remove all objects from the world. |
 
 ### Shape selector
@@ -33,33 +38,61 @@ Shapes don't just disappear — they **crack**, then **shatter**.
 ### Stage 1: Cracking
 Each explosion applies damage to every shape in its radius. Damaged shapes show **crack lines** radiating inward from the impact point. The fill dims from white to gray. More hits = more cracks.
 
-Damage is proportional to:
-- **Explosion Power** slider (higher = more damage)
-- **Distance** from blast center (closer = more damage)
-
 ### Stage 2: Shattering
-When a shape's accumulated damage reaches 100%, it **fractures into irregular polygonal fragments**. The fracture is computed in real-time using **poly-decomp**:
-
-1. The body's vertices are extracted as a polygon
-2. **2–3 random cut lines** are generated through the body (angled, passing near the explosion point)
-3. `decomp.lineSegmentsIntersect` finds where each cut line crosses the body's edges
-4. `decomp.lineIntersect` computes exact intersection points
-5. The polygon is split by walking the perimeter and inserting intersection points
-6. Each fragment is created via `Bodies.fromVertices()` — irregular convex polygons of varying shapes
-
-The result: fragments look like **actual broken chunks**, not perfect mini-shapes.
+When damage reaches 100%, the shape **fractures into irregular polygonal fragments** via poly-decomp (see below).
 
 ### Fragment behavior
-- Fragments are labeled `Fragment` (vs `Shape` for intact bodies)
-- They decay and disappear after **10–15 seconds**
-- Fragments can be **shattered again** by another explosion
-- Fragments collide with everything: walls, shapes, other fragments
-- Max **6 fragments** per shatter (performance cap)
+- Labeled `Fragment`, decay after 10–15 seconds
+- Can be shattered again by another explosion
+- Max 6 fragments per shatter, 20 cracks visual cap
 
-### Limits
-- Shapes stop cracking at **20 cracks** (visual cap)
-- 6 fragments max per shatter
-- Fragments expire after 10–15 seconds
+---
+
+## CAMERA
+
+Zoom and pan to explore the full world.
+
+| Action | Input |
+|---|---|
+| **Zoom** | Scroll wheel — zooms centered on your cursor position |
+| **Pan** | Right-click and drag |
+| **Reset view** | `R` key or RESET button — auto-fits the current world size |
+
+Zoom range: 0.08× – 20×.
+The grid adapts its step size when zoomed out to avoid visual clutter.
+
+---
+
+## WORLD SIZES
+
+Three world sizes, switchable on the fly:
+
+| Size | Dimensions | Volume |
+|---|---|---|
+| **Small** | 1600 × 1200 | default (fits one screen) |
+| **Medium** | 3200 × 2400 | 4× area |
+| **Large** | 6400 × 4800 | 16× area |
+
+Switch with the S/M/L buttons or press `X` to cycle.
+Changing world size resets the camera to fit the new bounds. All existing objects are preserved.
+
+---
+
+## WIND FORCE
+
+Toggle a constant directional force with `W` or the WIND button.
+- All non-static, non-boundary bodies feel the wind
+- Works with gravity wells — objects get pulled AND blown
+- Wind strength is subtle by default; adjusts with the physics
+
+---
+
+## EXPLOSION SHOCKWAVE
+
+Every explosion emits an expanding white ring that fades as it grows.
+- Radius: expands outward at a fixed speed
+- Life: fades over ~1 second
+- Purely visual — no collision or force
 
 ---
 
@@ -92,6 +125,16 @@ Static attractors that pull objects within a 350px radius. Adjustable pull stren
 | **Size** | 3–16 | 8 | Size of spawned shapes |
 | **Power** | 0.05–1.0 | 0.30 | Explosion blast strength |
 | **Pull** | 0.1–30 | 12.0 | Gravity well attraction force |
+
+## VIEW CONTROLS
+
+| Control | Location | Action |
+|---|---|---|
+| **World Size** | Bottom bar (S/M/L) or `X` | Change boundary size on the fly |
+| **Wind** | Bottom bar or `W` | Toggle directional wind force |
+| **Reset Camera** | Bottom bar or `R` | Auto-fit view to current world |
+| **Zoom** | Scroll wheel | Zoom centered on cursor |
+| **Pan** | Right-click drag | Move the camera |
 
 ---
 
@@ -171,15 +214,18 @@ No build step, no bundler, no dependencies. Just vanilla JS loaded via `<script>
 
 ## KEYBOARD SHORTCUTS
 
-| Key | Action |
-|---|---|
 | `1` | Spawn tool |
 | `2` | Explode tool |
 | `3` | Wall tool |
 | `4` | Gravity well tool |
 | `5` | Erase tool |
 | `Space` | Pause / resume |
-| Click while Spawn active | If clicking on an existing shape → drag it. Otherwise → spawn a new shape. |
+| `W` | Toggle wind |
+| `X` | Cycle world size |
+| `R` | Reset camera |
+| Scroll | Zoom in / out |
+| RClick drag | Pan the view |
+| Click while Spawn active | If on a shape → drag, else → spawn |
 
 ---
 

@@ -11,39 +11,45 @@ const Tools = (() => {
   let mouseX = 0, mouseY = 0;
 
   // ── Spawn ──
-  function handleSpawn(x, y) {
+  function handleSpawn(sx, sy) {
+    const p = Physics.screenToWorld ? Physics.screenToWorld(sx, sy) : { x: sx, y: sy };
     const size = parseInt(document.getElementById('shapeSize').value) || 8;
-    Physics.spawnShape(x, y, currentShape, size);
+    Physics.spawnShape(p.x, p.y, currentShape, size);
   }
 
   // ── Explosion ──
-  function handleExplode(x, y) {
+  function handleExplode(sx, sy) {
+    const p = Physics.screenToWorld ? Physics.screenToWorld(sx, sy) : { x: sx, y: sy };
     const strength = parseFloat(document.getElementById('explosionStrength').value);
-    Physics.explode(x, y, strength);
+    Physics.explode(p.x, p.y, strength);
   }
 
   // ── Draw Wall ──
-  function handleWallStart(x, y) {
+  function handleWallStart(sx, sy) {
     isDrawing = true;
-    drawStart = { x, y };
+    drawStart = { x: sx, y: sy };
   }
 
-  function handleWallEnd(x, y) {
+  function handleWallEnd(sx, sy) {
     if (!isDrawing || !drawStart) return;
-    Physics.drawWall(drawStart.x, drawStart.y, x, y);
+    const s = Physics.screenToWorld ? Physics.screenToWorld(drawStart.x, drawStart.y) : { x: drawStart.x, y: drawStart.y };
+    const e = Physics.screenToWorld ? Physics.screenToWorld(sx, sy) : { x: sx, y: sy };
+    Physics.drawWall(s.x, s.y, e.x, e.y);
     isDrawing = false;
     drawStart = null;
   }
 
   // ── Gravity Well ──
-  function handleGravity(x, y) {
+  function handleGravity(sx, sy) {
+    const p = Physics.screenToWorld ? Physics.screenToWorld(sx, sy) : { x: sx, y: sy };
     const strength = parseFloat(document.getElementById('gravityStrength').value);
-    Physics.addGravityWell(x, y, strength);
+    Physics.addGravityWell(p.x, p.y, strength);
   }
 
   // ── Erase ──
-  function handleErase(x, y) {
-    const body = Physics.getBodyAt(x, y);
+  function handleErase(sx, sy) {
+    const p = Physics.screenToWorld ? Physics.screenToWorld(sx, sy) : { x: sx, y: sy };
+    const body = Physics.getBodyAt(p.x, p.y);
     if (body) Physics.removeBody(body);
   }
 
