@@ -78,23 +78,12 @@
     });
   });
 
-  // ── Pixel size slider ──
-  const sizeSlider = document.getElementById('pixelSize');
-  const sizeVal = document.getElementById('pixelSizeVal');
+  // ── Shape size slider ──
+  const sizeSlider = document.getElementById('shapeSize');
+  const sizeVal = document.getElementById('shapeSizeVal');
   if (sizeSlider && sizeVal) {
     sizeSlider.addEventListener('input', () => {
       sizeVal.textContent = sizeSlider.value;
-    });
-  }
-
-  // ── Glue toggle ──
-  const glueBtn = document.getElementById('glueToggle');
-  if (glueBtn) {
-    glueBtn.addEventListener('click', () => {
-      const on = !Physics.getGlueMode();
-      Physics.setGlueMode(on);
-      glueBtn.textContent = on ? 'GLUE:ON' : 'GLUE:OFF';
-      glueBtn.classList.toggle('active', on);
     });
   }
 

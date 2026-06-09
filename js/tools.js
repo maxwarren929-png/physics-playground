@@ -12,7 +12,7 @@ const Tools = (() => {
 
   // ── Spawn ──
   function handleSpawn(x, y) {
-    const size = parseInt(document.getElementById('pixelSize').value) || 8;
+    const size = parseInt(document.getElementById('shapeSize').value) || 8;
     Physics.spawnShape(x, y, currentShape, size);
   }
 
