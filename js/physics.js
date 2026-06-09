@@ -1,11 +1,12 @@
 /**
  * Physics Playground — Physics Engine (Matter.js wrapper)
- * Rigid shapes that crack then shatter into irregular fragments.
+ * Rigid shapes that crack then shatter into irregular polygon fragments.
+ * Uses poly-decomp for polygon splitting.
  */
 
 const Physics = (() => {
   const {
-    Engine, Runner, Bodies, Body, Composite, Events, Query
+    Engine, Runner, Bodies, Body, Composite, Events, Query, Vertices
   } = Matter;
 
   let engine, world, runner;
@@ -14,28 +15,21 @@ const Physics = (() => {
   let mouseX = 0, mouseY = 0;
   let dragBody = null;
   let dragOffset = { x: 0, y: 0 };
-  let decayTimers = {}; // body.id -> expiry timestamp
+  let decayTimers = {};
   let decayInterval = null;
 
   function init(canvasEl) {
     try {
       canvas = canvasEl;
       ctx = canvas.getContext('2d');
-
       resize();
       window.addEventListener('resize', resize);
-
-      engine = Engine.create({
-        gravity: { x: 0, y: 0.08 }
-      });
+      engine = Engine.create({ gravity: { x: 0, y: 0.08 } });
       world = engine.world;
-
       createBoundaries();
       startDecayCleanup();
-
       runner = Runner.create();
       Runner.run(runner, engine);
-
       Events.on(engine, 'collisionStart', (event) => {
         event.pairs.forEach(pair => {
           [pair.bodyA, pair.bodyB].forEach(b => {
@@ -45,7 +39,6 @@ const Physics = (() => {
           });
         });
       });
-
       return physics;
     } catch(e) {
       console.error('Physics.init failed:', e.message);
@@ -71,7 +64,6 @@ const Physics = (() => {
     ];
     Composite.add(world, boundaryBodies);
   }
-
   function rebuildBoundaries() {
     boundaryBodies.forEach(b => Composite.remove(world, b));
     createBoundaries();
@@ -80,53 +72,27 @@ const Physics = (() => {
   // ── Drag ──
   function startDrag(x, y) {
     const body = getBodyAt(x, y);
-    if (body) {
-      dragBody = body;
-      dragOffset = { x: body.position.x - x, y: body.position.y - y };
-      Body.setStatic(body, false);
-      return true;
-    }
+    if (body) { dragBody = body; dragOffset = { x: body.position.x - x, y: body.position.y - y }; Body.setStatic(body, false); return true; }
     return false;
   }
   function moveDrag(x, y) {
-    if (dragBody) {
-      Body.setPosition(dragBody, { x: x + dragOffset.x, y: y + dragOffset.y });
-      Body.setVelocity(dragBody, { x: 0, y: 0 });
-    }
+    if (dragBody) { Body.setPosition(dragBody, { x: x + dragOffset.x, y: y + dragOffset.y }); Body.setVelocity(dragBody, { x: 0, y: 0 }); }
   }
   function endDrag() { dragBody = null; }
   function isDragging() { return dragBody !== null; }
 
-  // ── Spawn rigid shape ──
+  // ── Spawn ──
   function spawnShape(x, y, type, size) {
     const s = size || 8;
     const radius = 8 + s * 3.5;
-
-    const opts = {
-      restitution: 0.2,
-      friction: 0.4,
-      density: 0.003,
-      label: 'Shape'
-    };
-
+    const opts = { restitution: 0.2, friction: 0.4, density: 0.003, label: 'Shape' };
     let body;
     switch (type) {
-      case 'circle':
-        body = Bodies.circle(x, y, radius, opts);
-        break;
-      case 'rect':
-        body = Bodies.rectangle(x, y, radius * 2, radius * 2, opts);
-        break;
-      case 'triangle':
-        body = Bodies.polygon(x, y, 3, radius, opts);
-        break;
+      case 'circle':  body = Bodies.circle(x, y, radius, opts); break;
+      case 'rect':    body = Bodies.rectangle(x, y, radius * 2, radius * 2, opts); break;
+      case 'triangle': body = Bodies.polygon(x, y, 3, radius, opts); break;
     }
-
-    if (body) {
-      body._damage = 0;
-      body._cracks = [];
-      Composite.add(world, body);
-    }
+    if (body) { body._damage = 0; body._cracks = []; Composite.add(world, body); }
     return body;
   }
 
@@ -138,7 +104,7 @@ const Physics = (() => {
     const toShatter = [];
 
     bodies.forEach(body => {
-      if (body.isStatic || body.label === 'Boundary') return;
+      if (body.isStatic || body.label === 'Boundary' || body.label === 'GravityWell') return;
       const dx = body.position.x - x;
       const dy = body.position.y - y;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -146,181 +112,232 @@ const Physics = (() => {
         const power = (1 - dist / radius) * f;
 
         if (body.label === 'Shape') {
-          // Damage accumulates. One strong blast or multiple hits will shatter it.
           body._damage = (body._damage || 0) + power * 2.5;
           addCracks(body, x, y, power);
-
           if (body._damage >= 1) {
             toShatter.push({ body, dist, power, dx, dy });
           } else {
-            Body.applyForce(body, body.position, {
-              x: (dx / (dist || 1)) * power,
-              y: (dy / (dist || 1)) * power
-            });
+            Body.applyForce(body, body.position, { x: (dx / (dist || 1)) * power, y: (dy / (dist || 1)) * power });
           }
         } else if (body.label === 'Fragment') {
-          // Fragments can also be shattered further
           body._damage = (body._damage || 0) + power * 3;
           if (body._damage >= 1) {
             toShatter.push({ body, dist, power, dx, dy });
           } else {
-            Body.applyForce(body, body.position, {
-              x: (dx / (dist || 1)) * power,
-              y: (dy / (dist || 1)) * power
-            });
+            Body.applyForce(body, body.position, { x: (dx / (dist || 1)) * power, y: (dy / (dist || 1)) * power });
           }
         } else {
-          Body.applyForce(body, body.position, {
-            x: (dx / (dist || 1)) * power,
-            y: (dy / (dist || 1)) * power
-          });
+          Body.applyForce(body, body.position, { x: (dx / (dist || 1)) * power, y: (dy / (dist || 1)) * power });
         }
       }
     });
 
-    toShatter.forEach(({ body, dist, power }) => {
-      shatterBody(body, x, y, f, dist);
-    });
-
-    Particles.spawn(x, y, 25, { speed: 7 });
-    Particles.spawn(x, y, 12, { speed: 4 });
+    toShatter.forEach(({ body, dist }) => shatterBody(body, x, y, f, dist));
+    Particles.spawn(x, y, 20, { speed: 7 });
+    Particles.spawn(x, y, 10, { speed: 4 });
   }
 
-  // ── Add crack lines to a damaged body ──
+  // ── Cracks ──
   function addCracks(body, explosionX, explosionY, power) {
     if (!body._cracks) body._cracks = [];
-
     const verts = body.vertices;
-    const cx = body.position.x;
-    const cy = body.position.y;
-
-    // Find the vertex closest to the explosion — that's where cracks start
-    let closestDist = Infinity;
-    let closestIdx = 0;
+    const cx = body.position.x, cy = body.position.y;
+    let closestDist = Infinity, closestIdx = 0;
     verts.forEach((v, i) => {
       const d = (v.x - explosionX) ** 2 + (v.y - explosionY) ** 2;
       if (d < closestDist) { closestDist = d; closestIdx = i; }
     });
-
-    // Create cracks from nearby edge points inward toward center
-    const crackCount = 1 + Math.floor(power * 3);
-    for (let i = 0; i < crackCount; i++) {
-      // Pick a starting point on the body edge near the impact
+    const count = 1 + Math.floor(power * 3);
+    for (let i = 0; i < count; i++) {
       const edgeIdx = (closestIdx + Math.floor(Math.random() * 3 - 1) + verts.length) % verts.length;
       const nextIdx = (edgeIdx + 1) % verts.length;
-
-      // Random point between edgeIdx and nextIdx
       const t = Math.random();
       const sx = verts[edgeIdx].x + (verts[nextIdx].x - verts[edgeIdx].x) * t;
       const sy = verts[edgeIdx].y + (verts[nextIdx].y - verts[edgeIdx].y) * t;
-
-      // Crack goes inward — end at a random interior point
-      const inward = 0.3 + Math.random() * 0.5; // how deep
+      const inward = 0.3 + Math.random() * 0.5;
       const ex = cx + (sx - cx) * (1 - inward) + (Math.random() - 0.5) * 8;
       const ey = cy + (sy - cy) * (1 - inward) + (Math.random() - 0.5) * 8;
-
       body._cracks.push({ x1: sx, y1: sy, x2: ex, y2: ey });
     }
-
-    // Cap cracks
-    if (body._cracks.length > 20) {
-      body._cracks = body._cracks.slice(-20);
-    }
+    if (body._cracks.length > 20) body._cracks = body._cracks.slice(-20);
   }
 
-  // ── Shatter a body into irregular fragments ──
+  // ── Fracture using poly-decomp polygon splitting ──
   function shatterBody(body, explosionX, explosionY, force, dist) {
-    const pos = body.position;
     const verts = body.vertices;
-    const bounds = body.bounds;
-    const w = bounds.max.x - bounds.min.x;
-    const h = bounds.max.y - bounds.min.y;
-
+    const pos = body.position;
     Composite.remove(world, body);
 
-    // Build perimeter samples (original vertices + interpolated points along edges)
-    const perim = [];
-    for (let i = 0; i < verts.length; i++) {
-      const v1 = verts[i];
-      const v2 = verts[(i + 1) % verts.length];
-      perim.push({ x: v1.x, y: v1.y });
-      const steps = 1 + Math.floor(Math.random() * 2); // 1-2 extra points per edge
-      for (let s = 1; s <= steps; s++) {
-        const t = s / (steps + 1);
-        perim.push({
-          x: v1.x + (v2.x - v1.x) * t,
-          y: v1.y + (v2.y - v1.y) * t
-        });
-      }
+    // Get body vertices as [x,y] arrays for poly-decomp
+    const poly = verts.map(v => [v.x, v.y]);
+    decomp.makeCCW(poly);
+    decomp.removeCollinearPoints(poly, 0.1);
+
+    // Generate cut lines through the body
+    const numCuts = 2 + Math.floor(Math.random() * 2); // 2-3 cuts
+    const cuts = [];
+    for (let i = 0; i < numCuts; i++) {
+      // Each cut is a random line through the explosion point
+      const angle = (Math.PI / numCuts) * i + Math.random() * 0.8;
+      const len = 800;
+      const cx = explosionX + (Math.random() - 0.5) * 20;
+      const cy = explosionY + (Math.random() - 0.5) * 20;
+      cuts.push([
+        [cx + Math.cos(angle) * len, cy + Math.sin(angle) * len],
+        [cx - Math.cos(angle) * len, cy - Math.sin(angle) * len]
+      ]);
     }
 
-    // Interior point — offset from center toward the explosion
-    const edx = pos.x - explosionX;
-    const edy = pos.y - explosionY;
-    const ed = Math.sqrt(edx * edx + edy * edy) || 1;
-    const shift = Math.min(w, h) * 0.1;
-    const interiorX = pos.x + (edx / ed) * shift;
-    const interiorY = pos.y + (edy / ed) * shift;
+    // Apply cuts sequentially
+    let fragments = [poly];
 
-    const maxFragments = 12;
+    for (const cut of cuts) {
+      const next = [];
+      for (const frag of fragments) {
+        const split = splitPolygon(frag, cut);
+        next.push(...split);
+      }
+      fragments = next;
+    }
+
+    // Filter out tiny fragments
+    fragments = fragments.filter(p => {
+      if (p.length < 3) return false;
+      // Calculate area
+      let area = 0;
+      for (let i = 0; i < p.length; i++) {
+        const j = (i + 1) % p.length;
+        area += p[i][0] * p[j][1];
+        area -= p[j][0] * p[i][1];
+      }
+      area = Math.abs(area) / 2;
+      return area > 150;
+    });
+
+    // Cap fragments
+    const maxFragments = 8;
+    if (fragments.length > maxFragments) {
+      fragments.sort((a, b) => {
+        // Keep the largest ones
+        let aa = 0, ba = 0;
+        for (let i = 0; i < a.length; i++) {
+          const j = (i + 1) % a.length;
+          aa += a[i][0] * a[j][1] - a[j][0] * a[i][1];
+        }
+        for (let i = 0; i < b.length; i++) {
+          const j = (i + 1) % b.length;
+          ba += b[i][0] * b[j][1] - b[j][0] * b[i][1];
+        }
+        return Math.abs(ba) - Math.abs(aa);
+      });
+      fragments = fragments.slice(0, maxFragments);
+    }
+
+    // Create Matter.js bodies from each fragment polygon
     let fragCount = 0;
-
-    for (let i = 0; i < perim.length && fragCount < maxFragments; i++) {
-      const p1 = perim[i];
-      const p2 = perim[(i + 1) % perim.length];
-
-      // Skip tiny slivers
-      const area = Math.abs(
-        (interiorX * (p1.y - p2.y) + p1.x * (p2.y - interiorY) + p2.x * (interiorY - p1.y)) / 2
-      );
-      if (area < 200) continue;
-
-      const triVerts = [
-        { x: interiorX, y: interiorY },
-        { x: p1.x, y: p1.y },
-        { x: p2.x, y: p2.y }
-      ];
-
-      const centroidX = (interiorX + p1.x + p2.x) / 3;
-      const centroidY = (interiorY + p1.y + p2.y) / 3;
+    for (const fp of fragments) {
+      // Convert back to {x,y} vertices
+      const fv = fp.map(p => ({ x: p[0], y: p[1] }));
+      const centre = Vertices.centre(fv);
 
       try {
-        const frag = Bodies.fromVertices(centroidX, centroidY, [triVerts], {
+        const frag = Bodies.fromVertices(centre.x, centre.y, [fv], {
           restitution: 0.12,
           friction: 0.6,
           density: 0.002,
           label: 'Fragment'
         });
-
         if (frag) {
-          // Explosion velocity
-          const fdx = centroidX - explosionX;
-          const fdy = centroidY - explosionY;
+          // Apply explosion velocity
+          const fdx = centre.x - explosionX;
+          const fdy = centre.y - explosionY;
           const fd = Math.sqrt(fdx * fdx + fdy * fdy) || 1;
-          const power = (1 - dist / 250) * force * 0.45;
+          const power = (1 - dist / 250) * force * 0.5;
           Body.setVelocity(frag, {
             x: (fdx / fd) * power * (0.6 + Math.random() * 0.8),
             y: (fdy / fd) * power * (0.6 + Math.random() * 0.8) - 1.5
           });
-          Body.setAngularVelocity(frag, (Math.random() - 0.5) * 0.2);
-
+          Body.setAngularVelocity(frag, (Math.random() - 0.5) * 0.15);
           frag._damage = 0;
           Composite.add(world, frag);
-
-          // Live longer than the old shards (10-15 seconds)
           decayTimers[frag.id] = Date.now() + 10000 + Math.random() * 5000;
-          fragCount++;
+          if (++fragCount >= 6) break; // Hard cap
         }
-      } catch(e) {
-        // Skip fragment if fromVertices fails
-      }
+      } catch(e) { /* skip bodies that fail to create */ }
     }
 
-    // Also spawn some visual particles at the shatter point
+    // Visual particles at shatter point
     Particles.spawn(pos.x, pos.y, 8, { speed: 6 });
   }
 
-  // ── Periodic cleanup ──
+  // ── Split a polygon along a cut line ──
+  function splitPolygon(polygon, cutLine) {
+    // polygon: [[x,y], ...] in CCW order
+    // cutLine: [[x1,y1], [x2,y2]]
+    const n = polygon.length;
+    const intersections = [];
+    const indices = [];
+
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      if (decomp.lineSegmentsIntersect(polygon[i], polygon[j], cutLine[0], cutLine[1])) {
+        const pt = decomp.lineIntersect(cutLine, [polygon[i], polygon[j]]);
+        if (pt && isFinite(pt[0]) && isFinite(pt[1])) {
+          // Avoid duplicate intersection points
+          const dup = intersections.some(ex => Math.abs(ex[0] - pt[0]) < 2 && Math.abs(ex[1] - pt[1]) < 2);
+          if (!dup) {
+            intersections.push(pt);
+            indices.push(i);
+          }
+        }
+      }
+    }
+
+    if (intersections.length < 2) return [polygon]; // No valid split
+
+    // If we got more than 2, pick the pair that's farthest apart (gives the best split)
+    let bestI = 0, bestJ = 1, bestDist = 0;
+    for (let a = 0; a < intersections.length; a++) {
+      for (let b = a + 1; b < intersections.length; b++) {
+        const d = (intersections[a][0] - intersections[b][0]) ** 2 + (intersections[a][1] - intersections[b][1]) ** 2;
+        if (d > bestDist) { bestDist = d; bestI = a; bestJ = b; }
+      }
+    }
+
+    // Order by vertex index
+    let idxA = indices[bestI], idxB = indices[bestJ];
+    let ptA = intersections[bestI], ptB = intersections[bestJ];
+    if (idxA > idxB) {
+      [idxA, idxB] = [idxB, idxA];
+      [ptA, ptB] = [ptB, ptA];
+    }
+
+    const poly1 = [ptA];
+    for (let i = idxA + 1; i <= idxB; i++) poly1.push(polygon[i]);
+    poly1.push(ptB);
+
+    const poly2 = [ptB];
+    for (let i = idxB + 1; i < n; i++) poly2.push(polygon[i]);
+    for (let i = 0; i <= idxA; i++) poly2.push(polygon[i]);
+    poly2.push(ptA);
+
+    // Clean up
+    const result = [];
+    for (const p of [poly1, poly2]) {
+      // Remove near-duplicate consecutive points
+      const clean = [];
+      for (let i = 0; i < p.length; i++) {
+        const prev = clean[clean.length - 1];
+        if (!prev || Math.abs(prev[0] - p[i][0]) > 1 || Math.abs(prev[1] - p[i][1]) > 1) {
+          clean.push(p[i]);
+        }
+      }
+      if (clean.length >= 3) result.push(clean);
+    }
+    return result;
+  }
+
+  // ── Decay cleanup ──
   function startDecayCleanup() {
     if (decayInterval) return;
     decayInterval = setInterval(() => {
@@ -337,13 +354,10 @@ const Physics = (() => {
 
   // ── Wall ──
   function drawWall(x1, y1, x2, y2) {
-    const cx = (x1 + x2) / 2;
-    const cy = (y1 + y2) / 2;
+    const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
     const w = Math.max(Math.abs(x2 - x1) + 10, 12);
     const h = Math.max(Math.abs(y2 - y1) + 10, 12);
-    const wall = Bodies.rectangle(cx, cy, w, h, {
-      isStatic: true, restitution: 0.2, friction: 0.9, label: 'Wall'
-    });
+    const wall = Bodies.rectangle(cx, cy, w, h, { isStatic: true, restitution: 0.2, friction: 0.9, label: 'Wall' });
     Composite.add(world, wall);
     return wall;
   }
@@ -351,28 +365,20 @@ const Physics = (() => {
   // ── Gravity Well ──
   function addGravityWell(x, y, strength) {
     const str = strength || 12;
-    const well = Bodies.circle(x, y, 16, {
-      isStatic: true, label: 'GravityWell', collisionFilter: { group: -1 }
-    });
+    const well = Bodies.circle(x, y, 16, { isStatic: true, label: 'GravityWell', collisionFilter: { group: -1 } });
     Composite.add(world, well);
-
     const handler = Events.on(engine, 'beforeUpdate', () => {
-      const bodies = Composite.allBodies(world);
-      bodies.forEach(body => {
+      const allBodies = Composite.allBodies(world);
+      allBodies.forEach(body => {
         if (body === well || body.isStatic || body.label === 'Boundary') return;
-        const dx = well.position.x - body.position.x;
-        const dy = well.position.y - body.position.y;
+        const dx = well.position.x - body.position.x, dy = well.position.y - body.position.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > 5 && dist < 350) {
           const falloff = 1 - dist / 350;
-          Body.applyForce(body, body.position, {
-            x: (dx / dist) * str * falloff,
-            y: (dy / dist) * str * falloff
-          });
+          Body.applyForce(body, body.position, { x: (dx / dist) * str * falloff, y: (dy / dist) * str * falloff });
         }
       });
     });
-
     well._handler = handler;
     gravityWells.push(well);
     return well;
@@ -393,8 +399,7 @@ const Physics = (() => {
         Composite.remove(world, b);
       }
     });
-    gravityWells = [];
-    Particles.clear();
+    gravityWells = []; Particles.clear();
   }
 
   function getBodyAt(x, y) {
@@ -412,20 +417,14 @@ const Physics = (() => {
   // ── Render ──
   function update() {
     const bodies = Composite.allBodies(world);
-
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Grid
     ctx.strokeStyle = 'rgba(255,255,255,0.03)';
     ctx.lineWidth = 1;
-    const step = 32;
-    for (let x = 0; x < canvas.width; x += step) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-    }
-    for (let y = 0; y < canvas.height; y += step) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-    }
+    for (let x = 0; x < canvas.width; x += 32) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+    for (let y = 0; y < canvas.height; y += 32) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
 
     // Gravity wells
     bodies.forEach(b => { if (b.label === 'GravityWell') drawGravityWell(b); });
@@ -436,10 +435,7 @@ const Physics = (() => {
     // Shapes (with cracks if damaged)
     bodies.forEach(b => {
       if (b.label === 'Shape') {
-        const isDragged = b === dragBody;
         drawBody(b, b._damage > 0 ? '#eee' : '#fff', '#555');
-
-        // Draw cracks
         if (b._cracks && b._cracks.length > 0) {
           ctx.strokeStyle = `rgba(0,0,0,${0.3 + b._damage * 0.5})`;
           ctx.lineWidth = 1;
@@ -450,19 +446,12 @@ const Physics = (() => {
             ctx.stroke();
           });
         }
-
-        // Drag highlight
-        if (isDragged) {
-          drawBody(b, 'rgba(255,255,255,0.3)', 'transparent');
-        }
       }
     });
 
-    // Fragments (irregular broken pieces)
+    // Irregular polygon fragments from poly-decomp
     bodies.forEach(b => {
-      if (b.label === 'Fragment') {
-        drawBody(b, '#ddd', '#777');
-      }
+      if (b.label === 'Fragment') drawBody(b, '#ddd', '#777');
     });
 
     // Wall preview
@@ -473,16 +462,12 @@ const Physics = (() => {
         ctx.strokeStyle = 'rgba(255,255,255,0.3)';
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 4]);
-        ctx.strokeRect(
-          Math.min(start.x, mouseX), Math.min(start.y, mouseY),
-          Math.abs(mouseX - start.x), Math.abs(mouseY - start.y)
-        );
+        ctx.strokeRect(Math.min(start.x, mouseX), Math.min(start.y, mouseY), Math.abs(mouseX - start.x), Math.abs(mouseY - start.y));
         ctx.setLineDash([]);
       }
     }
 
     Particles.update();
-
     const el = document.getElementById('objectCounter');
     if (el) el.textContent = `OBJECTS: ${getObjectCount()}`;
   }
@@ -491,17 +476,10 @@ const Physics = (() => {
     const verts = body.vertices;
     ctx.beginPath();
     ctx.moveTo(verts[0].x, verts[0].y);
-    for (let i = 1; i < verts.length; i++) {
-      ctx.lineTo(verts[i].x, verts[i].y);
-    }
+    for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i].x, verts[i].y);
     ctx.closePath();
-    ctx.fillStyle = fill;
-    ctx.fill();
-    if (stroke && stroke !== 'transparent') {
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
+    ctx.fillStyle = fill; ctx.fill();
+    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
   }
 
   function drawGravityWell(body) {
@@ -509,32 +487,22 @@ const Physics = (() => {
     const pulse = 0.6 + 0.4 * Math.sin(Date.now() / 400);
     for (let i = 3; i >= 0; i--) {
       const r = 18 + i * 10 * pulse;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.strokeStyle = `rgba(255,255,255,${0.04 + i * 0.03})`;
-      ctx.lineWidth = 1;
-      ctx.stroke();
+      ctx.lineWidth = 1; ctx.stroke();
     }
     const grad = ctx.createRadialGradient(x, y, 0, x, y, 18);
-    grad.addColorStop(0, 'rgba(255,255,255,0.3)');
-    grad.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.beginPath();
-    ctx.arc(x, y, 18, 0, Math.PI * 2);
-    ctx.fillStyle = grad;
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(x - 1, y - 1, 2, 2);
+    grad.addColorStop(0, 'rgba(255,255,255,0.3)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.beginPath(); ctx.arc(x, y, 18, 0, Math.PI * 2);
+    ctx.fillStyle = grad; ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.fillRect(x - 1, y - 1, 2, 2);
   }
 
   function getCanvas() { return canvas; }
   function getCtx() { return ctx; }
   function getEngine() { return engine; }
   function getWorld() { return world; }
-
-  function togglePause() {
-    if (runner.enabled) { Runner.stop(runner); return false; }
-    else { Runner.run(runner, engine); return true; }
-  }
+  function togglePause() { if (runner.enabled) { Runner.stop(runner); return false; } else { Runner.run(runner, engine); return true; } }
 
   const physics = {
     init, spawnShape, explode, drawWall, addGravityWell,
