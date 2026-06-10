@@ -97,9 +97,15 @@ const Physics = (() => {
               if ((b.label === 'Shape' || b.label === 'Ragdoll' || b.label === 'Immovable') && (!b.isStatic || b.label === 'Immovable') && impact > 0.001) {
                 b._damage = (b._damage || 0) + impact;
                 if (!b._cracks) b._cracks = [];
+                // Crack from near the impact midpoint inward toward the body's center
+                // (avoiding giant spanning lines when the other body is a far-away boundary)
+                const impX = (bodyA.position.x + bodyB.position.x) / 2;
+                const impY = (bodyA.position.y + bodyB.position.y) / 2;
                 b._cracks.push({
-                  x1: bodyA.position.x, y1: bodyA.position.y,
-                  x2: b.position.x, y2: b.position.y
+                  x1: impX + (Math.random() - 0.5) * 8,
+                  y1: impY + (Math.random() - 0.5) * 8,
+                  x2: b.position.x + (Math.random() - 0.5) * 4,
+                  y2: b.position.y + (Math.random() - 0.5) * 4
                 });
                 if (b._cracks.length > 20) b._cracks = b._cracks.slice(-20);
                 impactFlashes.push({ x: (bodyA.position.x + bodyB.position.x) / 2, y: (bodyA.position.y + bodyB.position.y) / 2, radius: 3 + impact * 500, life: 6, maxLife: 6 });
@@ -1159,10 +1165,7 @@ const Physics = (() => {
     // Particles (world-space)
     Particles.update();
 
-    ctx.restore(); // ── End camera transform ──
-
-    // ── HUD (screen-space) ──
-    // Wall preview
+    // Wall preview — drawn INSIDE camera transform so world coordinates render correctly
     const tool = typeof Tools !== 'undefined' ? Tools.getCurrentTool() : null;
     if (tool === 'wall' && Tools.isCurrentlyDrawing()) {
       const start = Tools.getDrawStart();
@@ -1170,12 +1173,16 @@ const Physics = (() => {
         const s = screenToWorld(start.x, start.y);
         const e = screenToWorld(mouseX, mouseY);
         ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-        ctx.lineWidth = 1 / camera.zoom;
-        ctx.setLineDash([4 / camera.zoom, 4 / camera.zoom]);
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
         ctx.strokeRect(Math.min(s.x, e.x), Math.min(s.y, e.y), Math.abs(e.x - s.x), Math.abs(e.y - s.y));
         ctx.setLineDash([]);
       }
     }
+
+    ctx.restore(); // ── End camera transform ──
+
+    // ── HUD (screen-space) ──
 
   }
 
