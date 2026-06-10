@@ -63,7 +63,6 @@ const Physics = (() => {
   let frameCount = 0, lastFpsTime = performance.now(), currentFps = 0;
 
   function init(canvasEl) {
-    console.log('PHYSICS-v6 init -', new Date().toISOString());
     try {
       canvas = canvasEl;
       ctx = canvas.getContext('2d');
@@ -1183,6 +1182,11 @@ const Physics = (() => {
     ctx.restore(); // ── End camera transform ──
 
     // ── HUD (screen-space) ──
+    // Update object counter
+    const objEl = document.getElementById('objectCounter');
+    if (objEl) {
+      objEl.textContent = 'OBJECTS: ' + getObjectCount();
+    }
 
   }
 

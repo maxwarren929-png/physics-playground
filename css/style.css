@@ -28,10 +28,10 @@ body {
   transform: translateY(-50%);
   background: #111;
   border: 1px solid #333;
-  padding: 6px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   z-index: 100;
 }
 
@@ -42,7 +42,7 @@ body {
   justify-content: center;
   gap: 2px;
   width: 48px;
-  padding: 6px 4px;
+  padding: 7px 4px;
   border: none;
   background: transparent;
   color: #555;
@@ -50,7 +50,7 @@ body {
   font-size: 8px;
   text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.1s ease;
+  transition: background 0.12s ease-out, color 0.12s ease-out;
   image-rendering: pixelated;
 }
 
@@ -124,7 +124,7 @@ body {
   font-family: monospace;
   font-size: 11px;
   cursor: pointer;
-  transition: all 0.1s ease;
+  transition: background 0.12s ease-out, color 0.12s ease-out, border-color 0.12s ease-out;
 }
 
 .opt-btn:hover {
@@ -149,10 +149,11 @@ body {
 
 #toolOptions input[type="range"] {
   width: 80px;
-  height: 4px;
+  height: 6px;
   background: #333;
   accent-color: #fff;
   border: none;
+  border-radius: 3px;
   appearance: none;
   -webkit-appearance: none;
 }
@@ -160,11 +161,18 @@ body {
 #toolOptions input[type="range"]::-webkit-slider-thumb {
   appearance: none;
   -webkit-appearance: none;
-  width: 10px;
-  height: 10px;
-  background: #fff;
+  width: 12px;
+  height: 12px;
+  background: #eee;
   border: none;
+  border-radius: 0;
   cursor: pointer;
+}
+
+#toolOptions input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  background: #333;
+  border-radius: 3px;
 }
 
 #toolOptions span {
@@ -181,22 +189,22 @@ body {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 12px;
+  gap: 16px;
   background: #111;
   border: 1px solid #333;
-  padding: 4px 12px;
+  padding: 5px 14px;
   font-size: 11px;
-  color: #666;
+  color: #777;
   z-index: 100;
 }
 
 #objectCounter {
   font-size: 11px;
-  color: #666;
+  color: #777;
 }
 
 #fpsDisplay {
-  color: #444;
+  color: #666;
   min-width: 50px;
   text-align: right;
 }
@@ -246,7 +254,7 @@ body {
   display: flex;
   gap: 10px;
   font-size: 9px;
-  color: #333;
+  color: #555;
   z-index: 100;
   letter-spacing: 0.3px;
 }
