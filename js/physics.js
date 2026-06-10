@@ -690,7 +690,9 @@ const Physics = (() => {
             const norm = dist / 350;
             const falloff = (1 - norm) * (1 - norm);
             let force = (str / (body.mass || 1)) * falloff;
-            force = Math.min(force, 0.03);
+            // Scale cap with mass so heavy bodies (Force) feel real pull
+            // while light objects stay protected from being yeeted
+            force = Math.min(force, Math.max(0.03, body.mass * 0.003));
             Body.applyForce(body, body.position, {
               x: (dx / dist) * force,
               y: (dy / dist) * force
@@ -724,17 +726,26 @@ const Physics = (() => {
             const norm = dist / range;
             const falloff = (1 - norm) * (1 - norm);
             let force = (str * 2 / (body.mass || 1)) * falloff;
-            force = Math.min(force, 0.08);
+            // Scale cap with mass so the Force can be overwhelmed
+            force = Math.min(force, Math.max(0.08, body.mass * 0.008));
             Body.applyForce(body, body.position, {
               x: (dx / dist) * force,
               y: (dy / dist) * force
             });
             if (dist < 28) {
-              if (body._handler) Events.off(engine, 'beforeUpdate', body._handler);
-              delete decayTimers[body.id];
-              forceBodies = forceBodies.filter(b => b !== body);
-              Particles.spawn(body.position.x, body.position.y, 12, { speed: 6 });
-              pendingOps.push({ type: 'remove', body });
+              if (body.label === 'Force') {
+                // Trap the Force — pin it static at the singularity
+                Body.setStatic(body, true);
+                Body.setVelocity(body, { x: 0, y: 0 });
+                Body.setPosition(body, { x: well.position.x, y: well.position.y });
+                Particles.spawn(body.position.x, body.position.y, 12, { speed: 6 });
+              } else {
+                if (body._handler) Events.off(engine, 'beforeUpdate', body._handler);
+                delete decayTimers[body.id];
+                forceBodies = forceBodies.filter(b => b !== body);
+                Particles.spawn(body.position.x, body.position.y, 12, { speed: 6 });
+                pendingOps.push({ type: 'remove', body });
+              }
             }
           }
         });
