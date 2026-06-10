@@ -22,8 +22,8 @@ There's no off-the-shelf Matter.js fracture library. `voronoi-breakable` exists 
 ### poly-decomp patch
 The original poly-decomp.js UMD wrapper passes `f.exports` as the `module` parameter (should be `f`). Fixed by using `exports.X = fn` instead of `module.exports = {X: fn}`. Also added `lineSegmentsIntersect` and `lineIntersect` to the exports (they were internal functions).
 
-### Why weak gravity (y: 0.08)?
-User requested 5× weaker than y: 0.4. Makes shapes feel floaty and stable. Particles have matching reduced gravity (y: 0.015).
+### Gravity
+Engine gravity is `y: 0.4`. Particle (screen-space) gravity is `vy += 0.08` per frame (≈4.8 units/sec² at 60fps).
 
 ## Visual Rules
 - Black background, white shapes, gray strokes

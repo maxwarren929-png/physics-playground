@@ -31,7 +31,12 @@ const Physics = (() => {
   let dragStartPos = null;
   let springBodyA = null;
   let decayTimers = {};
+  // ── Juice ──
+  let shakeIntensity = 0, shakeDuration = 0;
+  let dragTrail = [];
+  let impactFlashes = [];
   let decayInterval = null;
+  let pendingOps = [];
 
   // ── Camera ──
   const camera = { x: 800, y: 600, zoom: 1 };
@@ -58,13 +63,16 @@ const Physics = (() => {
   let frameCount = 0, lastFpsTime = performance.now(), currentFps = 0;
 
   function init(canvasEl) {
+    console.log('PHYSICS-v6 init -', new Date().toISOString());
     try {
       canvas = canvasEl;
       ctx = canvas.getContext('2d');
       resize();
       window.addEventListener('resize', resize);
 
-      engine = Engine.create({ gravity: { x: 0, y: 0.4 } });
+      engine = Engine.create({ gravity: { x: 0, y: 0.4, scale: 0.001 } });
+      // Clear any initial stale pairs that Matter.js creates internally
+      if (engine.pairs) engine.pairs.list = [];
       world = engine.world;
 
       applyWorldSize('small');
@@ -74,39 +82,43 @@ const Physics = (() => {
 
       paused = false;
       Events.on(engine, 'collisionStart', (event) => {
-        event.pairs.forEach(pair => {
-          const { bodyA, bodyB } = pair;
+        try {
+          event.pairs.forEach(pair => {
+            const { bodyA, bodyB } = pair;
 
-          // Velocity-based crushing damage
-          const vx = bodyA.velocity.x - bodyB.velocity.x;
-          const vy = bodyA.velocity.y - bodyB.velocity.y;
-          const speed = Math.sqrt(vx * vx + vy * vy);
-          const impact = speed * Math.max(bodyA.mass, bodyB.mass) * 3;
+            // Velocity-based crushing damage
+            const vx = bodyA.velocity.x - bodyB.velocity.x;
+            const vy = bodyA.velocity.y - bodyB.velocity.y;
+            const speed = Math.sqrt(vx * vx + vy * vy);
+            // Pure speed-based impact (mass removed: matter.js boundary masses are enormous)
+            const impact = speed * 0.0008;
 
-          const applyCrush = (b) => {
-            if ((b.label === 'Shape' || b.label === 'Ragdoll') && !b.isStatic && impact > 0.5) {
-              b._damage = (b._damage || 0) + impact;
-              if (!b._cracks) b._cracks = [];
-              // Add a crack from the impact
-              b._cracks.push({
-                x1: bodyA.position.x, y1: bodyA.position.y,
-                x2: b.position.x, y2: b.position.y
-              });
-              if (b._cracks.length > 20) b._cracks = b._cracks.slice(-20);
-              if (b._damage >= 1) {
-                // Shatter on heavy impact
-                const bt = bodyA.velocity.y > 0 ? bodyA : bodyB;
-                shatterBody(b, bt.position.x, bt.position.y, impact, 0);
-                return;
+            const applyCrush = (b) => {
+              if ((b.label === 'Shape' || b.label === 'Ragdoll' || b.label === 'Immovable') && (!b.isStatic || b.label === 'Immovable') && impact > 0.001) {
+                b._damage = (b._damage || 0) + impact;
+                if (!b._cracks) b._cracks = [];
+                b._cracks.push({
+                  x1: bodyA.position.x, y1: bodyA.position.y,
+                  x2: b.position.x, y2: b.position.y
+                });
+                if (b._cracks.length > 20) b._cracks = b._cracks.slice(-20);
+                impactFlashes.push({ x: (bodyA.position.x + bodyB.position.x) / 2, y: (bodyA.position.y + bodyB.position.y) / 2, radius: 3 + impact * 500, life: 6, maxLife: 6 });
+                if (b._damage >= 1) {
+                  const bt = bodyA.velocity.y > 0 ? bodyA : bodyB;
+                  pendingOps.push({ type: 'shatter', body: b, x: bt.position.x, y: bt.position.y, force: Math.min(impact * 150, 4), dist: 0 });
+                  return;
+                }
               }
-            }
-            if ((b.label === 'Shape' || b.label === 'Fragment' || b.label === 'Ragdoll') && !b.isStatic)
-              Particles.spawn(b.position.x, b.position.y, 1);
-          };
+              if ((b.label === 'Shape' || b.label === 'Fragment' || b.label === 'Ragdoll') && !b.isStatic)
+                Particles.spawn(b.position.x, b.position.y, 1);
+            };
 
-          applyCrush(bodyA);
-          applyCrush(bodyB);
-        });
+            applyCrush(bodyA);
+            applyCrush(bodyB);
+          });
+        } catch(e) {
+          console.warn('Collision handler error:', e.message);
+        }
       });
 
       return physics;
@@ -138,11 +150,16 @@ const Physics = (() => {
   function createBoundaries() {
     const t = 60;
     const opts = { isStatic: true, restitution: 0.3, label: 'Boundary' };
+    // Boundaries positioned so their AABBs do NOT overlap at corners
+    // Floor: spans world width, sits below world
     boundaryBodies = [
-      Bodies.rectangle(worldW / 2, worldH + t / 2, worldW + t * 2, t, opts),
-      Bodies.rectangle(-t / 2, worldH / 2, t, worldH + t * 2, opts),
-      Bodies.rectangle(worldW + t / 2, worldH / 2, t, worldH + t * 2, opts),
-      Bodies.rectangle(worldW / 2, -t / 2, worldW + t * 2, t, opts),
+      Bodies.rectangle(worldW / 2, worldH + t / 2, worldW + t, t, opts),
+      // Left wall: spans only world height, no overlap with floor/ceiling
+      Bodies.rectangle(-t / 2, worldH / 2, t, worldH, opts),
+      // Right wall: same
+      Bodies.rectangle(worldW + t / 2, worldH / 2, t, worldH, opts),
+      // Ceiling: spans world width, sits above world
+      Bodies.rectangle(worldW / 2, -t / 2, worldW + t, t, opts),
     ];
     if (world) Composite.add(world, boundaryBodies);
   }
@@ -220,10 +237,8 @@ const Physics = (() => {
 
   // ── Resize ──
   function resize() {
-    const oldW = canvas.width, oldH = canvas.height;
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-    if (engine) rebuildBoundaries();
   }
 
   // ── Drag + Slingshot ──
@@ -248,23 +263,23 @@ const Physics = (() => {
       ny = Math.max(20, Math.min(worldH - 20, ny));
       Body.setPosition(dragBody, { x: nx, y: ny });
       Body.setVelocity(dragBody, { x: 0, y: 0 });
+      // Drag trail
+      dragTrail.push({ x: nx, y: ny });
+      if (dragTrail.length > 35) dragTrail.shift();
     }
   }
   function endDrag() {
-    if (dragBody && dragStartPos) {
-      // Slingshot launch
-      const dx = dragStartPos.x - dragBody.position.x;
-      const dy = dragStartPos.y - dragBody.position.y;
-      const pull = Math.sqrt(dx * dx + dy * dy);
-      if (pull > 15) {
-        const scale = Math.min(pull / 80, 3);
-        Body.setVelocity(dragBody, { x: dx * scale, y: dy * scale });
-      }
-    }
     dragBody = null;
     dragStartPos = null;
+    dragTrail = [];
   }
   function isDragging() { return dragBody !== null; }
+
+  // ── Juice ──
+  function triggerShake(intensity, frames) {
+    shakeIntensity = intensity;
+    shakeDuration = frames;
+  }
 
   // ── Spawn ──
   function spawnShape(x, y, type, size) {
@@ -277,7 +292,7 @@ const Physics = (() => {
       case 'rect':    body = Bodies.rectangle(x, y, radius * 2, radius * 2, opts); break;
       case 'triangle': body = Bodies.polygon(x, y, 3, radius, opts); break;
     }
-    if (body) { body._damage = 0; body._cracks = []; Composite.add(world, body); }
+    if (body) { body._damage = 0; body._cracks = []; body._spawnTime = performance.now(); Composite.add(world, body); }
     return body;
   }
 
@@ -318,6 +333,7 @@ const Physics = (() => {
     parts.push(rleg);
 
     Composite.add(world, parts);
+    parts.forEach(p => p._spawnTime = performance.now());
 
     // Constraints (joints)
     const constraints = [
@@ -347,61 +363,72 @@ const Physics = (() => {
     });
     body._damage = 0; body._cracks = [];
     Composite.add(world, body);
+    body._spawnTime = performance.now();
 
     const handler = Events.on(engine, 'beforeUpdate', () => {
-      // Constant thrust to the right
-      Body.applyForce(body, body.position, { x: 0.003 * body.mass, y: 0 });
+      try {
+        // Constant thrust to the right
+        Body.applyForce(body, body.position, { x: 0.003 * body.mass, y: 0 });
 
-      const allBodies = Composite.allBodies(world);
+        // Exhaust particles
+        if (Math.random() < 0.4) Particles.spawn(body.position.x - 28, body.position.y + (Math.random() - 0.5) * 16, 1, { speed: 1.5 });
 
-      // Destroy walls the Force is grinding against
-      allBodies.forEach(b => {
-        if (b.label === 'Wall') {
-          const dx = body.position.x - b.position.x;
-          const dy = body.position.y - b.position.y;
-          if (Math.abs(dx) < 50 && Math.abs(dy) < 50) {
-            shatterBody(b, b.position.x, b.position.y, 0.5, 0);
-          }
-        }
-      });
+        const allBodies = Composite.allBodies(world);
 
-      // Breach boundaries — temporarily remove the wall segment the Force is pushing on
-      allBodies.forEach(b => {
-        if (b.label === 'Boundary' && body.position.x > -50 && body.position.x < worldW + 50 && body.position.y > -50 && body.position.y < worldH + 50) {
-          const dx = body.position.x - b.position.x;
-          const dy = body.position.y - b.position.y;
-          const halfW = (b.bounds.max.x - b.bounds.min.x) / 2;
-          const halfH = (b.bounds.max.y - b.bounds.min.y) / 2;
-          // Check if Force is touching this boundary segment
-          const onEdge = (Math.abs(dx) < halfW + 10 && Math.abs(dy) < halfH + 10);
-          if (onEdge && !boundaryBreachTimers[b.id]) {
-            boundaryBreachTimers[b.id] = { body: b, respawnAt: Date.now() + 2000 };
-            Composite.remove(world, b);
-          }
-        }
-      });
-
-      // Damage any Immovable it's crushing into
-      allBodies.forEach(b => {
-        if (b.label === 'Immovable') {
-          const dx = body.position.x - b.position.x;
-          const dy = body.position.y - b.position.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 72) {
-            b._damage = (b._damage || 0) + 0.005;
-            if (Math.random() < 0.03 && b._cracks) {
-              b._cracks.push({
-                x1: body.position.x, y1: body.position.y,
-                x2: b.position.x, y2: b.position.y
-              });
-              if (b._cracks.length > 20) b._cracks = b._cracks.slice(-20);
-            }
-            if (b._damage >= 1) {
-              shatterBody(b, b.position.x, b.position.y, 0.5, 0);
+        // Destroy walls the Force is grinding against
+        allBodies.forEach(b => {
+          if (b.label === 'Wall') {
+            const dx = body.position.x - b.position.x;
+            const dy = body.position.y - b.position.y;
+            const halfW = Math.max(Math.abs(b.bounds.max.x - b.bounds.min.x) / 2, 12);
+            const halfH = Math.max(Math.abs(b.bounds.max.y - b.bounds.min.y) / 2, 12);
+          if (Math.abs(dx) < halfW + 24 && Math.abs(dy) < halfH + 24) {
+              pendingOps.push({ type: 'shatter', body: b, x: b.position.x, y: b.position.y, force: 0.5, dist: 0 });
             }
           }
-        }
-      });
+        });
+
+        // Breach boundaries — temporarily remove the wall segment the Force is pushing on
+        allBodies.forEach(b => {
+          if (b.label === 'Boundary' && body.position.x > -50 && body.position.x < worldW + 50 && body.position.y > -50 && body.position.y < worldH + 50) {
+            // Only breach vertical walls (left/right), never the floor or ceiling
+            if (b.position.y < 0 || b.position.y > worldH) return;
+            const dx = body.position.x - b.position.x;
+            const dy = body.position.y - b.position.y;
+            const halfW = (b.bounds.max.x - b.bounds.min.x) / 2;
+            const halfH = (b.bounds.max.y - b.bounds.min.y) / 2;
+            const onEdge = (Math.abs(dx) < halfW + 10 && Math.abs(dy) < halfH + 10);
+            if (onEdge && !boundaryBreachTimers[b.id]) {
+              boundaryBreachTimers[b.id] = { body: b, respawnAt: Date.now() + 2000 };
+              pendingOps.push({ type: 'remove', body: b });
+            }
+          }
+        });
+
+        // Damage any Immovable it's crushing into
+        allBodies.forEach(b => {
+          if (b.label === 'Immovable') {
+            const dx = body.position.x - b.position.x;
+            const dy = body.position.y - b.position.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 72) {
+              b._damage = (b._damage || 0) + 0.005;
+              if (Math.random() < 0.03 && b._cracks) {
+                b._cracks.push({
+                  x1: body.position.x, y1: body.position.y,
+                  x2: b.position.x, y2: b.position.y
+                });
+                if (b._cracks.length > 20) b._cracks = b._cracks.slice(-20);
+              }
+              if (b._damage >= 1) {
+                pendingOps.push({ type: 'shatter', body: b, x: b.position.x, y: b.position.y, force: 0.5, dist: 0 });
+              }
+            }
+          }
+        });
+      } catch(e) {
+        console.warn('Force handler error:', e.message);
+      }
     });
     body._handler = handler;
     forceBodies.push(body);
@@ -414,6 +441,7 @@ const Physics = (() => {
       isStatic: true, restitution: 1, friction: 1, label: 'Immovable', density: 1
     });
     body._damage = 0; body._cracks = [];
+    body._spawnTime = performance.now();
     Composite.add(world, body);
     return body;
   }
@@ -452,10 +480,12 @@ const Physics = (() => {
       }
     });
 
+    triggerShake(10, 12);
+    impactFlashes.push({ x, y, radius: 60, life: 12, maxLife: 12 });
     toShatter.forEach(({ body, dist }) => shatterBody(body, x, y, f, dist));
     addShockwave(x, y, 200);
-    Particles.spawn(x, y, 20, { speed: 7 });
-    Particles.spawn(x, y, 10, { speed: 4 });
+    Particles.spawn(x, y, 30, { speed: 8 });
+    Particles.spawn(x, y, 15, { speed: 5 });
   }
 
   // ── Cracks ──
@@ -486,45 +516,55 @@ const Physics = (() => {
   // ── Fracture ──
   function shatterBody(body, explosionX, explosionY, force, dist) {
     const verts = body.vertices, pos = body.position;
-    Composite.remove(world, body);
     const poly = verts.map(v => [v.x, v.y]);
-    decomp.makeCCW(poly);
-    decomp.removeCollinearPoints(poly, 0.1);
 
-    const cuts = [];
-    for (let i = 0; i < 2 + Math.floor(Math.random() * 2); i++) {
-      const angle = (Math.PI / 2) * i + Math.random() * 0.8;
-      const len = 800;
-      const cx = explosionX + (Math.random() - 0.5) * 20;
-      const cy = explosionY + (Math.random() - 0.5) * 20;
-      cuts.push([[cx + Math.cos(angle) * len, cy + Math.sin(angle) * len],
-                 [cx - Math.cos(angle) * len, cy - Math.sin(angle) * len]]);
-    }
+    // Generate fragment polygons before removing the body
+    let fragments = [];
+    try {
+      decomp.makeCCW(poly);
+      decomp.removeCollinearPoints(poly, 0.1);
 
-    let fragments = [poly];
-    for (const cut of cuts) {
-      const next = [];
-      for (const frag of fragments) {
-        const split = splitPolygon(frag, cut);
-        next.push(...split);
+      const cuts = [];
+      for (let i = 0; i < 2 + Math.floor(Math.random() * 2); i++) {
+        const angle = (Math.PI / 2) * i + Math.random() * 0.8;
+        const len = 800;
+        const cx = explosionX + (Math.random() - 0.5) * 20;
+        const cy = explosionY + (Math.random() - 0.5) * 20;
+        cuts.push([[cx + Math.cos(angle) * len, cy + Math.sin(angle) * len],
+                   [cx - Math.cos(angle) * len, cy - Math.sin(angle) * len]]);
       }
-      fragments = next;
+
+      fragments = [poly];
+      for (const cut of cuts) {
+        const next = [];
+        for (const frag of fragments) {
+          const split = splitPolygon(frag, cut);
+          next.push(...split);
+        }
+        fragments = next;
+      }
+
+      fragments = fragments.filter(p => {
+        if (p.length < 3) return false;
+        let area = 0;
+        for (let i = 0; i < p.length; i++) { const j = (i + 1) % p.length; area += p[i][0] * p[j][1] - p[j][0] * p[i][1]; }
+        return Math.abs(area) / 2 > 300;
+      });
+
+      if (fragments.length > 8) {
+        fragments.sort((a, b) => { let aa = 0, ba = 0;
+          for (let i = 0; i < a.length; i++) { const j = (i + 1) % a.length; aa += a[i][0] * a[j][1] - a[j][0] * a[i][1]; }
+          for (let i = 0; i < b.length; i++) { const j = (i + 1) % b.length; ba += b[i][0] * b[j][1] - b[j][0] * b[i][1]; }
+          return Math.abs(ba) - Math.abs(aa); });
+        fragments = fragments.slice(0, 8);
+      }
+    } catch(e) {
+      console.warn('Fracture generation failed:', e.message);
+      fragments = [];
     }
 
-    fragments = fragments.filter(p => {
-      if (p.length < 3) return false;
-      let area = 0;
-      for (let i = 0; i < p.length; i++) { const j = (i + 1) % p.length; area += p[i][0] * p[j][1] - p[j][0] * p[i][1]; }
-      return Math.abs(area) / 2 > 300;
-    });
-
-    if (fragments.length > 8) {
-      fragments.sort((a, b) => { let aa = 0, ba = 0;
-        for (let i = 0; i < a.length; i++) { const j = (i + 1) % a.length; aa += a[i][0] * a[j][1] - a[j][0] * a[i][1]; }
-        for (let i = 0; i < b.length; i++) { const j = (i + 1) % b.length; ba += b[i][0] * b[j][1] - b[j][0] * b[i][1]; }
-        return Math.abs(ba) - Math.abs(aa); });
-      fragments = fragments.slice(0, 8);
-    }
+    // Now remove the original body (safe even if fragment generation failed)
+    Composite.remove(world, body);
 
     let fragCount = 0;
     for (const fp of fragments) {
@@ -558,9 +598,12 @@ const Physics = (() => {
           decayTimers[frag.id] = Date.now() + 10000 + Math.random() * 5000;
           if (++fragCount >= 6) break;
         }
-      } catch(e) {}
+      } catch(e) {
+        console.warn('Fragment creation failed:', e.message);
+      }
     }
-    Particles.spawn(pos.x, pos.y, 8, { speed: 6 });
+    if (fragCount > 0) triggerShake(2, 4);
+    Particles.spawn(pos.x, pos.y, 12, { speed: 6 });
   }
 
   function splitPolygon(polygon, cutLine) {
@@ -631,24 +674,27 @@ const Physics = (() => {
     const well = Bodies.circle(x, y, 16, { isStatic: true, label: 'GravityWell', collisionFilter: { group: -1 } });
     Composite.add(world, well);
     const handler = Events.on(engine, 'beforeUpdate', () => {
-      const allBodies = Composite.allBodies(world);
-      allBodies.forEach(body => {
-        if (body === well || body.isStatic || body.label === 'Boundary') return;
-        const dx = well.position.x - body.position.x;
-        const dy = well.position.y - body.position.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 8 && dist < 350) {
-          // Quadratic falloff + mass normalization + cap to prevent jitter
-          const norm = dist / 350;
-          const falloff = (1 - norm) * (1 - norm);
-          let force = (str / (body.mass || 1)) * falloff;
-          force = Math.min(force, 0.03); // hard cap to prevent freakout
-          Body.applyForce(body, body.position, {
-            x: (dx / dist) * force,
-            y: (dy / dist) * force
-          });
-        }
-      });
+      try {
+        const allBodies = Composite.allBodies(world);
+        allBodies.forEach(body => {
+          if (body === well || body.isStatic || body.label === 'Boundary') return;
+          const dx = well.position.x - body.position.x;
+          const dy = well.position.y - body.position.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > 8 && dist < 350) {
+            const norm = dist / 350;
+            const falloff = (1 - norm) * (1 - norm);
+            let force = (str / (body.mass || 1)) * falloff;
+            force = Math.min(force, 0.03);
+            Body.applyForce(body, body.position, {
+              x: (dx / dist) * force,
+              y: (dy / dist) * force
+            });
+          }
+        });
+      } catch(e) {
+        console.warn('Gravity well handler error:', e.message);
+      }
     });
     well._handler = handler;
     gravityWells.push(well);
@@ -662,31 +708,34 @@ const Physics = (() => {
     Composite.add(world, well);
     const range = 450;
     const handler = Events.on(engine, 'beforeUpdate', () => {
-      const allBodies = Composite.allBodies(world);
-      allBodies.forEach(body => {
-        if (body === well || body.isStatic || body.label === 'Boundary') return;
-        const dx = well.position.x - body.position.x;
-        const dy = well.position.y - body.position.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 5 && dist < range) {
-          const norm = dist / range;
-          const falloff = (1 - norm) * (1 - norm);
-          let force = (str * 2 / (body.mass || 1)) * falloff;
-          force = Math.min(force, 0.08);
-          Body.applyForce(body, body.position, {
-            x: (dx / dist) * force,
-            y: (dy / dist) * force
-          });
-          // Destroy objects that enter the event horizon
-          if (dist < 28) {
-            if (body._handler) Events.off(engine, 'beforeUpdate', body._handler);
-            delete decayTimers[body.id];
-            forceBodies = forceBodies.filter(b => b !== body);
-            Particles.spawn(body.position.x, body.position.y, 12, { speed: 6 });
-            Composite.remove(world, body);
+      try {
+        const allBodies = Composite.allBodies(world);
+        allBodies.forEach(body => {
+          if (body === well || body.isStatic || body.label === 'Boundary') return;
+          const dx = well.position.x - body.position.x;
+          const dy = well.position.y - body.position.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > 5 && dist < range) {
+            const norm = dist / range;
+            const falloff = (1 - norm) * (1 - norm);
+            let force = (str * 2 / (body.mass || 1)) * falloff;
+            force = Math.min(force, 0.08);
+            Body.applyForce(body, body.position, {
+              x: (dx / dist) * force,
+              y: (dy / dist) * force
+            });
+            if (dist < 28) {
+              if (body._handler) Events.off(engine, 'beforeUpdate', body._handler);
+              delete decayTimers[body.id];
+              forceBodies = forceBodies.filter(b => b !== body);
+              Particles.spawn(body.position.x, body.position.y, 12, { speed: 6 });
+              pendingOps.push({ type: 'remove', body });
+            }
           }
-        }
-      });
+        });
+      } catch(e) {
+        console.warn('Black hole handler error:', e.message);
+      }
     });
     well._handler = handler;
     gravityWells.push(well);
@@ -750,13 +799,14 @@ const Physics = (() => {
         Composite.remove(world, b);
       }
     });
-    gravityWells = []; Particles.clear();
+    springBodyA = null; gravityWells = []; Particles.clear();
+    shakeIntensity = 0; shakeDuration = 0; dragTrail = []; impactFlashes = [];
   }
 
   function getBodyAt(x, y) {
     const bodies = Composite.allBodies(world);
     const found = Query.point(bodies, { x, y });
-    return found.find(b => !b.isStatic && b.label !== 'Boundary' && b.label !== 'GravityWell') || null;
+    return found.find(b => (b.label === 'Immovable' || (!b.isStatic && b.label !== 'Boundary' && b.label !== 'GravityWell'))) || null;
   }
 
   function getObjectCount() {
@@ -772,10 +822,40 @@ const Physics = (() => {
       try {
         Engine.update(engine, 1000 / 60);
       } catch(e) {
-        // Matter.js collision bug with degenerate vertices — skip frame
-        console.warn('Engine update skipped:', e.message);
+        // Matter.js collision bug — log full details
+        console.warn('PHYSICS-v6 Engine update skipped:', e.message);
+        console.warn('PHYSICS-v6 STACK:', (e.stack || 'no stack').split('\n').slice(0,6).join('\n'));
+        // Temporarily log the world state for debugging
+        try {
+          const allBodies = Composite.allBodies(world);
+          console.warn('World has', allBodies.length, 'bodies:', allBodies.map(b => b.label + ':' + b.id).join(', '));
+          allBodies.forEach(b => {
+            if (!b.vertices || b.vertices.length < 3) {
+              console.warn('  INVALID BODY:', b.id, b.label, 'verts:', b.vertices ? b.vertices.length : 'none');
+            }
+          });
+        } catch(inner) {}
       }
     }
+
+    // Process deferred body ops (shatter, remove) — MUST run after Engine.update
+    // to avoid corrupting Matter.js collision resolver with freed body data
+    for (const op of pendingOps) {
+      try {
+        if (op.type === 'shatter') {
+          shatterBody(op.body, op.x, op.y, op.force, op.dist);
+        } else if (op.type === 'remove') {
+          Composite.remove(world, op.body);
+        }
+      } catch(e) {
+        console.warn('Deferred op failed:', e.message);
+      }
+    }
+    pendingOps = [];
+
+    // Clear Matter.js collision pair cache — stale pairs cause "Cannot read properties of undefined (reading 'index')"
+    // when they reference bodies that were just removed via pendingOps
+    if (engine && engine.pairs) engine.pairs.list = [];
 
     // Respawn breached boundaries
     const now = Date.now();
@@ -792,13 +872,13 @@ const Physics = (() => {
         // Check proximity to each edge
         const eps = 5;
         if (Math.abs(y - (worldH + t/2)) < eps)
-          newB = Bodies.rectangle(worldW/2, worldH + t/2, worldW + t*2, t, opts);
+          newB = Bodies.rectangle(worldW/2, worldH + t/2, worldW + t, t, opts);
         else if (Math.abs(y - (-t/2)) < eps)
-          newB = Bodies.rectangle(worldW/2, -t/2, worldW + t*2, t, opts);
+          newB = Bodies.rectangle(worldW/2, -t/2, worldW + t, t, opts);
         else if (Math.abs(x - (-t/2)) < eps)
-          newB = Bodies.rectangle(-t/2, worldH/2, t, worldH + t*2, opts);
+          newB = Bodies.rectangle(-t/2, worldH/2, t, worldH, opts);
         else if (Math.abs(x - (worldW + t/2)) < eps)
-          newB = Bodies.rectangle(worldW + t/2, worldH/2, t, worldH + t*2, opts);
+          newB = Bodies.rectangle(worldW + t/2, worldH/2, t, worldH, opts);
 
         if (newB) {
           boundaryBodies = boundaryBodies.map(b => b === entry.body ? newB : b);
@@ -807,6 +887,38 @@ const Physics = (() => {
         delete boundaryBreachTimers[id];
       }
     }
+
+    // Safety net: ensure all 4 world boundaries exist each frame
+    const allBoundaries = Composite.allBodies(world).filter(b => b.label === 'Boundary');
+    const boundaryOpts = { isStatic: true, restitution: 0.3, label: 'Boundary' };
+    // Check for floor (y > worldH)
+    if (!allBoundaries.some(b => b.position.y > worldH)) {
+      Composite.add(world, Bodies.rectangle(worldW / 2, worldH + 30, worldW + 60, 60, boundaryOpts));
+    }
+    // Check for ceiling (y < 0)
+    if (!allBoundaries.some(b => b.position.y < 0)) {
+      Composite.add(world, Bodies.rectangle(worldW / 2, -30, worldW + 60, 60, boundaryOpts));
+    }
+    // Check for left wall (x < 0)
+    if (!allBoundaries.some(b => b.position.x < 0)) {
+      Composite.add(world, Bodies.rectangle(-30, worldH / 2, 60, worldH, boundaryOpts));
+    }
+    // Check for right wall (x > worldW)
+    if (!allBoundaries.some(b => b.position.x > worldW)) {
+      Composite.add(world, Bodies.rectangle(worldW + 30, worldH / 2, 60, worldH, boundaryOpts));
+    }
+
+    // Purge all stale breach entries — bodies removed from world are recreated by safety net above
+    const worldBodyMap = new Map(Composite.allBodies(world).map(b => [b.id, b]));
+    for (const id of Object.keys(boundaryBreachTimers)) {
+      if (!worldBodyMap.has(Number(id))) {
+        delete boundaryBreachTimers[id];
+      }
+    }
+
+    // Re-read boundary bodies into the tracker array
+    boundaryBodies = Composite.allBodies(world).filter(b => b.label === 'Boundary');
+
     const bodies = Composite.allBodies(world);
 
     ctx.fillStyle = '#000';
@@ -814,6 +926,15 @@ const Physics = (() => {
 
     // ── Camera transform ──
     ctx.save();
+
+    // Screen shake
+    if (shakeDuration > 0) {
+      const sx = (Math.random() - 0.5) * shakeIntensity;
+      const sy = (Math.random() - 0.5) * shakeIntensity;
+      ctx.translate(sx, sy);
+      shakeDuration--;
+    }
+
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.scale(camera.zoom, camera.zoom);
     ctx.translate(-camera.x, -camera.y);
@@ -876,6 +997,19 @@ const Physics = (() => {
       for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i].x, verts[i].y);
       ctx.closePath(); ctx.stroke();
       ctx.setLineDash([]);
+    }
+
+    // Drag trail
+    if (dragTrail.length > 1) {
+      for (let i = 1; i < dragTrail.length; i++) {
+        const t = i / dragTrail.length;
+        ctx.strokeStyle = `rgba(255,255,255,${t * 0.35})`;
+        ctx.lineWidth = t * 2;
+        ctx.beginPath();
+        ctx.moveTo(dragTrail[i-1].x, dragTrail[i-1].y);
+        ctx.lineTo(dragTrail[i].x, dragTrail[i].y);
+        ctx.stroke();
+      }
     }
 
     // Slingshot pull-back line
@@ -985,6 +1119,37 @@ const Physics = (() => {
       ctx.stroke();
     });
 
+    // Spawn rings
+    bodies.forEach(b => {
+      if (b._spawnTime && b.label !== 'Boundary' && b.label !== 'GravityWell' && b.label !== 'BlackHole') {
+        const elapsed = performance.now() - b._spawnTime;
+        if (elapsed < 250) {
+          const progress = elapsed / 250;
+          const r = 8 + progress * 16;
+          ctx.beginPath();
+          ctx.arc(b.position.x, b.position.y, r, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(255,255,255,${(1 - progress) * 0.25})`;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+    });
+
+    // Impact flashes
+    for (let i = impactFlashes.length - 1; i >= 0; i--) {
+      const f = impactFlashes[i];
+      const alpha = (f.life / f.maxLife) * 0.5;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.radius * (1 - f.life / f.maxLife * 0.3), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+      ctx.fill();
+      f.life--;
+      if (f.life <= 0) impactFlashes.splice(i, 1);
+    }
+
+    // Particles (world-space)
+    Particles.update();
+
     ctx.restore(); // ── End camera transform ──
 
     // ── HUD (screen-space) ──
@@ -1003,7 +1168,6 @@ const Physics = (() => {
       }
     }
 
-    Particles.update();
   }
 
   function drawBody(body, fill, stroke) {
