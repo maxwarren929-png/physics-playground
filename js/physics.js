@@ -853,9 +853,18 @@ const Physics = (() => {
     }
     pendingOps = [];
 
-    // Clear Matter.js collision pair cache — stale pairs cause "Cannot read properties of undefined (reading 'index')"
-    // when they reference bodies that were just removed via pendingOps
-    if (engine && engine.pairs) engine.pairs.list = [];
+    // Filter stale pairs out of the collision cache instead of clearing everything.
+    // Bodies removed via pendingOps above leave dangling references in engine.pairs.list
+    // which crash the next Engine.update with "Cannot read properties of undefined (reading 'index')".
+    // Clearing all pairs every frame kills collision persistence — fast-moving objects lose
+    // their contact memory and tunnel through walls on the next step.
+    if (engine && engine.pairs && engine.pairs.list.length > 0) {
+      const activeIds = new Set();
+      Composite.allBodies(world).forEach(b => activeIds.add(b.id));
+      engine.pairs.list = engine.pairs.list.filter(
+        p => p && p.bodyA && p.bodyB && activeIds.has(p.bodyA.id) && activeIds.has(p.bodyB.id)
+      );
+    }
 
     // Respawn breached boundaries
     const now = Date.now();
