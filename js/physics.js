@@ -92,6 +92,17 @@ const Physics = (() => {
             // Pure speed-based impact (mass removed: matter.js boundary masses are enormous)
             const impact = speed * 0.0008;
 
+            // Mover3000 reversal
+            [bodyA, bodyB].forEach(b => {
+              if (b.label === 'Mover3000' && b._hasCamera) {
+                if (bodyA.label === 'Boundary' || bodyB.label === 'Boundary' || bodyA.label === 'Wall' || bodyB.label === 'Wall') {
+                  const oldX = b._direction.x;
+                  b._direction.x = b._direction.y;
+                  b._direction.y = -oldX;
+                }
+              }
+            });
+
             const applyCrush = (b) => {
               if ((b.label === 'Shape' || b.label === 'Ragdoll' || b.label === 'Immovable') && (!b.isStatic || b.label === 'Immovable') && impact > 0.001) {
                 b._damage = (b._damage || 0) + impact;
@@ -220,6 +231,19 @@ const Physics = (() => {
             Body.applyForce(b, b.position, { x: fx, y: fy });
         });
       }
+      
+      // Mover3000 Force
+      const movers = Composite.allBodies(world).filter(b => b.label === 'Mover3000');
+      const constraints = Composite.allConstraints(world);
+      movers.forEach(m => {
+        const force = { x: m._direction.x * 0.005 * m.mass, y: m._direction.y * 0.005 * m.mass };
+        Body.applyForce(m, m.position, force);
+        constraints.forEach(c => {
+          if (c.bodyA === m) Body.applyForce(c.bodyB, c.bodyB.position, force);
+          else if (c.bodyB === m) Body.applyForce(c.bodyA, c.bodyA.position, force);
+        });
+      });
+
       // Shockwave decay
       shockwaves = shockwaves.filter(sw => {
         sw.radius += sw.speed;
@@ -444,15 +468,18 @@ const Physics = (() => {
     return body;
   }
 
-  // ── Immovable Object ──
-  function spawnImmovable(x, y) {
-    const body = Bodies.rectangle(x, y, 80, 80, {
-      isStatic: true, restitution: 1, friction: 1, label: 'Immovable', density: 1
+  function spawnMover3000(x, y) {
+    const body = Bodies.circle(x, y, 20, {
+      label: 'Mover3000', density: 0.01, friction: 0, frictionAir: 0
     });
-    body._damage = 0; body._cracks = [];
-    body._spawnTime = performance.now();
+    body._direction = { x: 1, y: 0 };
+    body._hasCamera = false;
     Composite.add(world, body);
     return body;
+  }
+
+  function toggleMoverCamera(body) {
+    body._hasCamera = !body._hasCamera;
   }
 
   // ── Explosion ──
@@ -949,6 +976,14 @@ const Physics = (() => {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Mover3000 camera tracking
+    bodies.forEach(b => {
+      if (b.label === 'Mover3000' && b._hasCamera) {
+        camera.x = b.position.x;
+        camera.y = b.position.y;
+      }
+    });
+
     // ── Camera transform ──
     ctx.save();
 
@@ -1118,6 +1153,18 @@ const Physics = (() => {
       ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
     });
 
+    // Mover3000 bodies
+    bodies.forEach(b => {
+      if (b.label === 'Mover3000') {
+        drawBody(b, '#fff', '#aaa');
+        if (b._hasCamera) {
+          ctx.fillStyle = '#f00';
+          ctx.beginPath(); ctx.arc(b.position.x, b.position.y, 6, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = '#fff'; ctx.stroke();
+        }
+      }
+    });
+
     // Force bodies
     bodies.forEach(b => {
       if (b.label === 'Force') {
@@ -1281,11 +1328,11 @@ const Physics = (() => {
   function getWorldH() { return worldH; }
 
   const physics = {
-    init, spawnShape, spawnRagdoll, spawnForce, spawnImmovable,
+    init, spawnShape, spawnRagdoll, spawnForce, spawnMover3000, spawnImmovable,
     explode, drawWall, addGravityWell, addBlackHole,
     addSpringConstraint, addAnchoredSpring,
     getSpringBodyA, setSpringBodyA, clearSpringBodyA,
-    addWeldConstraint,
+    addWeldConstraint, toggleMoverCamera,
     removeBody, clearAll, getBodyAt, getObjectCount,
     update, getCanvas, getCtx, getEngine, getWorld,
     togglePause, setMousePos,
