@@ -21,7 +21,9 @@ const Tools = (() => {
         Physics.spawnRagdoll(p.x, p.y, size);
         break;
       case 'force':
-        Physics.spawnForce(p.x, p.y);
+        const strength = parseFloat(document.getElementById('forceStrength').value) || 0.003;
+        const angle = parseFloat(document.getElementById('forceAngle').value) || 0;
+        Physics.spawnForce(p.x, p.y, strength, angle);
         break;
       case 'immovable':
         Physics.spawnImmovable(p.x, p.y);

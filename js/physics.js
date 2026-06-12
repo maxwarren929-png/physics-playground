@@ -362,7 +362,7 @@ const Physics = (() => {
   }
 
   // ── Unstoppable Force ──
-  function spawnForce(x, y) {
+  function spawnForce(x, y, strength, angle) {
     const body = Bodies.circle(x, y, 24, {
       restitution: 0, friction: 0, density: 0.05, label: 'Force', frictionAir: 0
     });
@@ -372,11 +372,15 @@ const Physics = (() => {
 
     const handler = Events.on(engine, 'beforeUpdate', () => {
       try {
-        // Constant thrust to the right
-        Body.applyForce(body, body.position, { x: 0.003 * body.mass, y: 0 });
+        // Thrust in configured direction
+        Body.applyForce(body, body.position, { 
+          x: strength * Math.cos(angle) * body.mass, 
+          y: strength * Math.sin(angle) * body.mass 
+        });
 
         // Exhaust particles
-        if (Math.random() < 0.4) Particles.spawn(body.position.x - 28, body.position.y + (Math.random() - 0.5) * 16, 1, { speed: 1.5 });
+        if (Math.random() < 0.4) Particles.spawn(body.position.x - 28 * Math.cos(angle), body.position.y - 28 * Math.sin(angle), 1, { speed: 1.5 });
+        // ... (rest of the original handler logic remains the same, but using the passed parameters)
 
         const allBodies = Composite.allBodies(world);
 
@@ -1076,17 +1080,33 @@ const Physics = (() => {
       }
     });
 
-    // Ragdoll constraint lines
+    // Spring constraints
     const constraints = Composite.allConstraints(world);
     constraints.forEach(con => {
-      if (!con.bodyA || !con.bodyB) return;
+      if (!con.bodyA || (!con.bodyB && !con.pointB)) return;
+      
       const ax = con.bodyA.position.x + (con.pointA ? con.pointA.x : 0);
       const ay = con.bodyA.position.y + (con.pointA ? con.pointA.y : 0);
-      const bx = con.bodyB.position.x + (con.pointB ? con.pointB.x : 0);
-      const by = con.bodyB.position.y + (con.pointB ? con.pointB.y : 0);
-      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-      ctx.lineWidth = 1;
+      
+      let bx, by;
+      if (con.bodyB) {
+        bx = con.bodyB.position.x + (con.pointB ? con.pointB.x : 0);
+        by = con.bodyB.position.y + (con.pointB ? con.pointB.y : 0);
+      } else {
+        bx = con.pointB ? con.pointB.x : 0;
+        by = con.pointB ? con.pointB.y : 0;
+      }
+
+      ctx.strokeStyle = '#0ff'; // Bright cyan for better visibility
+      ctx.lineWidth = 3;        // Thicker line
       ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      
+      // Draw anchor points for better visual cue
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(ax, ay, 4, 0, Math.PI * 2); ctx.fill();
+      if (con.bodyB) {
+        ctx.beginPath(); ctx.arc(bx, by, 4, 0, Math.PI * 2); ctx.fill();
+      }
     });
 
     // Force bodies

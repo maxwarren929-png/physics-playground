@@ -108,6 +108,9 @@
       document.querySelectorAll('.opt-btn[data-shape]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       Tools.setCurrentShape(btn.dataset.shape);
+      
+      const forceOpts = document.getElementById('forceOptions');
+      if (forceOpts) forceOpts.style.display = (btn.dataset.shape === 'force' ? 'block' : 'none');
     });
   });
 
@@ -116,6 +119,18 @@
   const sizeVal = document.getElementById('shapeSizeVal');
   if (sizeSlider && sizeVal) {
     sizeSlider.addEventListener('input', () => { sizeVal.textContent = sizeSlider.value; });
+  }
+
+  // ── Force sliders ──
+  const fStrengthSlider = document.getElementById('forceStrength');
+  const fStrengthVal = document.getElementById('forceStrengthVal');
+  if (fStrengthSlider && fStrengthVal) {
+    fStrengthSlider.addEventListener('input', () => { fStrengthVal.textContent = fStrengthSlider.value; });
+  }
+  const fAngleSlider = document.getElementById('forceAngle');
+  const fAngleVal = document.getElementById('forceAngleVal');
+  if (fAngleSlider && fAngleVal) {
+    fAngleSlider.addEventListener('input', () => { fAngleVal.textContent = fAngleSlider.value; });
   }
 
   // ── Explosion strength slider ──
