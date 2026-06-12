@@ -40,12 +40,12 @@ const Tools = (() => {
         break;
       case 'force':
         const strength = parseFloat(document.getElementById('forceStrength').value) || 0.003;
-        const angle = parseFloat(document.getElementById('forceAngle').value) || 0;
-        Physics.spawnForce(p.x, p.y, strength, angle);
+        const fAngle = parseFloat(document.getElementById('forceAngle').value) || 0;
+        Physics.spawnForce(p.x, p.y, strength, fAngle);
         break;
       case 'mover3000':
-        const angle = parseFloat(document.getElementById('moverAngle').value) || 0;
-        Physics.spawnMover3000(p.x, p.y, angle);
+        const mAngle = parseFloat(document.getElementById('moverAngle').value) || 0;
+        Physics.spawnMover3000(p.x, p.y, mAngle);
         break;
       case 'immovable':
         Physics.spawnImmovable(p.x, p.y);

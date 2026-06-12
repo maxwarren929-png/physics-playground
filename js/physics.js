@@ -493,6 +493,10 @@ const Physics = (() => {
     body._direction.y = oldX;
   }
 
+  function toggleMoverCamera(body) {
+    body._hasCamera = !body._hasCamera;
+  }
+
   // ── Immovable Object ──
   function spawnImmovable(x, y) {
     const body = Bodies.rectangle(x, y, 80, 80, {
