@@ -44,7 +44,8 @@ const Tools = (() => {
         Physics.spawnForce(p.x, p.y, strength, angle);
         break;
       case 'mover3000':
-        Physics.spawnMover3000(p.x, p.y);
+        const angle = parseFloat(document.getElementById('moverAngle').value) || 0;
+        Physics.spawnMover3000(p.x, p.y, angle);
         break;
       case 'immovable':
         Physics.spawnImmovable(p.x, p.y);
@@ -127,6 +128,44 @@ const Tools = (() => {
     }
   }
 
+  // ── Indestructible Tool ──
+  function handleIndestructible(sx, sy) {
+    const p = Physics.screenToWorld ? Physics.screenToWorld(sx, sy) : { x: sx, y: sy };
+    const body = Physics.getBodyAt(p.x, p.y);
+    if (body) {
+      Physics.toggleIndestructible(body);
+    }
+  }
+
+  let weldBodyA = null;
+  let isSelecting = false;
+  let selectionStart = null;
+  let copyBuffer = null;
+
+  // ── Copy/Paste ──
+  function handleCopyStart(sx, sy) {
+    isSelecting = true;
+    selectionStart = { x: sx, y: sy };
+    copyBuffer = null;
+  }
+
+  function handleCopyEnd(sx, sy) {
+    if (!isSelecting) return;
+    const startWorld = Physics.screenToWorld ? Physics.screenToWorld(selectionStart.x, selectionStart.y) : selectionStart;
+    const endWorld = Physics.screenToWorld ? Physics.screenToWorld(sx, sy) : { x: sx, y: sy };
+    copyBuffer = Physics.getBodiesInArea(startWorld.x, startWorld.y, endWorld.x, endWorld.y);
+    isSelecting = false;
+    selectionStart = null;
+  }
+
+  function handlePaste(sx, sy) {
+    if (copyBuffer) {
+      const p = Physics.screenToWorld ? Physics.screenToWorld(sx, sy) : { x: sx, y: sy };
+      Physics.pasteCluster(copyBuffer, p.x, p.y);
+      copyBuffer = null;
+    }
+  }
+
   // ── Dispatch ──
   function onMouseDown(x, y) {
     switch (currentTool) {
@@ -138,6 +177,8 @@ const Tools = (() => {
       case 'spring':  handleSpring(x, y); break;
       case 'weld':    handleWeld(x, y); break;
       case 'camera':  handleCamera(x, y); break;
+      case 'indestructible': handleIndestructible(x, y); break;
+      case 'copy':    copyBuffer ? handlePaste(x, y) : handleCopyStart(x, y); break;
     }
   }
 
@@ -149,6 +190,7 @@ const Tools = (() => {
 
   function onMouseUp(x, y) {
     if (currentTool === 'wall') handleWallEnd(x, y);
+    if (currentTool === 'copy') handleCopyEnd(x, y);
   }
 
   // ── Tool switching ──
@@ -158,6 +200,7 @@ const Tools = (() => {
     drawStart = null;
     if (tool !== 'spring') Physics.clearSpringBodyA();
     if (tool !== 'weld') weldBodyA = null;
+    if (tool !== 'copy') { isSelecting = false; copyBuffer = null; }
 
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
     const btn = document.querySelector(`[data-tool="${tool}"]`);
@@ -169,7 +212,7 @@ const Tools = (() => {
 
     const canvas = Physics.getCanvas();
     if (canvas) {
-      const cursors = { spawn: 'crosshair', explode: 'cell', wall: 'copy', gravity: 'grab', erase: 'not-allowed', spring: 'pointer', weld: 'alias', camera: 'zoom-in' };
+      const cursors = { spawn: 'crosshair', explode: 'cell', wall: 'copy', gravity: 'grab', erase: 'not-allowed', spring: 'pointer', weld: 'alias', camera: 'zoom-in', indestructible: 'shield', copy: 'cell' };
       canvas.style.cursor = cursors[tool] || 'default';
     }
 
@@ -177,6 +220,8 @@ const Tools = (() => {
 
   // ── Accessors ──
   function isCurrentlyDrawing() { return isDrawing; }
+  function isSelecting() { return isSelecting; }
+  function getSelectionStart() { return selectionStart; }
   function getDrawStart() { return drawStart; }
   function getCurrentTool() { return currentTool; }
   function getCurrentShape() { return currentShape; }
@@ -190,7 +235,7 @@ const Tools = (() => {
 
   return {
     onMouseDown, onMouseMove, onMouseUp, setTool,
-    isCurrentlyDrawing, getDrawStart, getCurrentTool,
+    isCurrentlyDrawing, isSelecting, getSelectionStart, getDrawStart, getCurrentTool,
     getCurrentShape, setCurrentShape,
     getGravityMode, setGravityMode,
     getSpringStiffness, setSpringStiffness,

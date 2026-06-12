@@ -104,6 +104,7 @@ const Physics = (() => {
             });
 
             const applyCrush = (b) => {
+              if (b._isIndestructible) return;
               if ((b.label === 'Shape' || b.label === 'Ragdoll' || b.label === 'Immovable') && (!b.isStatic || b.label === 'Immovable') && impact > 0.001) {
                 b._damage = (b._damage || 0) + impact;
                 if (!b._cracks) b._cracks = [];
@@ -468,11 +469,11 @@ const Physics = (() => {
     return body;
   }
 
-  function spawnMover3000(x, y) {
+  function spawnMover3000(x, y, angle) {
     const body = Bodies.circle(x, y, 20, {
       label: 'Mover3000', density: 0.01, friction: 0, frictionAir: 0
     });
-    body._direction = { x: 1, y: 0 };
+    body._direction = { x: Math.cos(angle), y: Math.sin(angle) };
     body._hasCamera = false;
     Composite.add(world, body);
     return body;
@@ -493,6 +494,10 @@ const Physics = (() => {
     return body;
   }
 
+  function toggleIndestructible(body) {
+    body._isIndestructible = !body._isIndestructible;
+  }
+
   // ── Explosion ──
   function explode(x, y, force) {
     const f = force || 0.3;
@@ -503,6 +508,7 @@ const Physics = (() => {
     bodies.forEach(body => {
       if (body.label === 'Boundary' || body.label === 'GravityWell') return;
       if (body.isStatic && body.label !== 'Immovable') return;
+      if (body._isIndestructible) return;
 
       const dx = body.position.x - x, dy = body.position.y - y;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -851,11 +857,53 @@ const Physics = (() => {
     return con;
   }
 
-  function removeBody(body) {
-    if (body._handler) Events.off(engine, 'beforeUpdate', body._handler);
-    delete decayTimers[body.id];
-    forceBodies = forceBodies.filter(b => b !== body);
-    Composite.remove(world, body);
+  function getBodiesInArea(x1, y1, x2, y2) {
+    const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+    const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+    return Composite.allBodies(world).filter(b => {
+      if (b.label === 'Boundary' || b.label === 'GravityWell' || b.label === 'BlackHole') return false;
+      return b.position.x >= minX && b.position.x <= maxX && b.position.y >= minY && b.position.y <= maxY;
+    });
+  }
+
+  function pasteCluster(bodies, x, y) {
+    if (bodies.length === 0) return;
+    
+    // Calculate center of copied bodies
+    let cx = 0, cy = 0;
+    bodies.forEach(b => { cx += b.position.x; cy += b.position.y; });
+    cx /= bodies.length; cy /= bodies.length;
+
+    // Create mappings for new bodies
+    const bodyMap = new Map();
+    const newBodies = bodies.map(b => {
+      let newB;
+      const dx = b.position.x - cx, dy = b.position.y - cy;
+      const opts = { label: b.label, isStatic: b.isStatic, restitution: b.restitution, friction: b.friction, density: b.density };
+      if (b.label === 'Mover3000') newB = spawnMover3000(x + dx, y + dy);
+      else if (b.label === 'Immovable') newB = spawnImmovable(x + dx, y + dy);
+      else if (b.label === 'Shape') newB = spawnShape(x + dx, y + dy, 'circle', 8); // Simplified
+      else return null;
+      
+      bodyMap.set(b.id, newB);
+      return newB;
+    }).filter(b => b !== null);
+
+    // Re-create constraints
+    const constraints = Composite.allConstraints(world);
+    bodies.forEach(b => {
+      constraints.forEach(c => {
+        if (c.bodyA === b || c.bodyB === b) {
+          const other = (c.bodyA === b) ? c.bodyB : c.bodyA;
+          if (bodyMap.has(b.id) && bodyMap.has(other.id)) {
+            const newA = bodyMap.get(b.id);
+            const newB = bodyMap.get(other.id);
+            if (c.label === 'Weld') addWeldConstraint(newA, newB);
+            else if (c.label === 'Spring') addSpringConstraint(newA, newB, c.stiffness);
+          }
+        }
+      });
+    });
   }
 
   function clearAll() {
@@ -1119,7 +1167,7 @@ const Physics = (() => {
     // Shapes (with cracks)
     bodies.forEach(b => {
       if (b.label === 'Shape') {
-        drawBody(b, b._damage > 0 ? '#eee' : '#fff', '#555');
+        drawBody(b, b._isIndestructible ? '#888' : (b._damage > 0 ? '#eee' : '#fff'), '#555');
         if (b._cracks && b._cracks.length > 0) {
           ctx.strokeStyle = `rgba(0,0,0,${0.3 + b._damage * 0.5})`;
           ctx.lineWidth = 1;
@@ -1295,6 +1343,35 @@ const Physics = (() => {
       }
     }
 
+    // Selection box for Copy tool
+    if (tool === 'copy' && typeof Tools.isSelecting !== 'undefined' && Tools.isSelecting()) {
+      const start = Tools.getSelectionStart();
+      const s = screenToWorld(start.x, start.y);
+      const e = screenToWorld(mouseX, mouseY);
+      ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)'; // Cyan box
+      ctx.lineWidth = 2;
+      ctx.strokeRect(Math.min(s.x, e.x), Math.min(s.y, e.y), Math.abs(e.x - s.x), Math.abs(e.y - s.y));
+    }
+
+    // Mover3000 preview
+    if (tool === 'spawn' && Tools.getCurrentShape() === 'mover3000') {
+      const angle = parseFloat(document.getElementById('moverAngle').value) || 0;
+      const mouseWorld = screenToWorld(mouseX, mouseY);
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(mouseWorld.x, mouseWorld.y);
+      ctx.lineTo(mouseWorld.x + Math.cos(angle) * 40, mouseWorld.y + Math.sin(angle) * 40);
+      ctx.stroke();
+      // Arrowhead
+      ctx.beginPath();
+      ctx.moveTo(mouseWorld.x + Math.cos(angle) * 40, mouseWorld.y + Math.sin(angle) * 40);
+      ctx.lineTo(mouseWorld.x + Math.cos(angle) * 32 - Math.sin(angle) * 8, mouseWorld.y + Math.sin(angle) * 32 + Math.cos(angle) * 8);
+      ctx.moveTo(mouseWorld.x + Math.cos(angle) * 40, mouseWorld.y + Math.sin(angle) * 40);
+      ctx.lineTo(mouseWorld.x + Math.cos(angle) * 32 + Math.sin(angle) * 8, mouseWorld.y + Math.sin(angle) * 32 - Math.cos(angle) * 8);
+      ctx.stroke();
+    }
+
     ctx.restore(); // ── End camera transform ──
 
     // ── HUD (screen-space) ──
@@ -1361,7 +1438,8 @@ const Physics = (() => {
     explode, drawWall, addGravityWell, addBlackHole,
     addSpringConstraint, addAnchoredSpring,
     getSpringBodyA, setSpringBodyA, clearSpringBodyA,
-    addWeldConstraint, toggleMoverCamera,
+    addWeldConstraint, toggleMoverCamera, toggleIndestructible,
+    getBodiesInArea, pasteCluster,
     removeBody, clearAll, getBodyAt, getObjectCount,
     update, getCanvas, getCtx, getEngine, getWorld,
     togglePause, setMousePos,

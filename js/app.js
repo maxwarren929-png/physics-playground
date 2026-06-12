@@ -110,9 +110,18 @@
       Tools.setCurrentShape(btn.dataset.shape);
       
       const forceOpts = document.getElementById('forceOptions');
+      const moverOpts = document.getElementById('moverOptions');
       if (forceOpts) forceOpts.style.display = (btn.dataset.shape === 'force' ? 'block' : 'none');
+      if (moverOpts) moverOpts.style.display = (btn.dataset.shape === 'mover3000' ? 'block' : 'none');
     });
   });
+
+  // ── Mover angle slider ──
+  const mAngleSlider = document.getElementById('moverAngle');
+  const mAngleVal = document.getElementById('moverAngleVal');
+  if (mAngleSlider && mAngleVal) {
+    mAngleSlider.addEventListener('input', () => { mAngleVal.textContent = mAngleSlider.value; });
+  }
 
   // ── Shape size slider ──
   const sizeSlider = document.getElementById('shapeSize');
