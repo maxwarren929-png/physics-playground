@@ -819,6 +819,24 @@ const Physics = (() => {
     return con;
   }
 
+  function addAnchoredSpring(bodyA, worldX, worldY, stiffness) {
+    // Create a static point body as anchor
+    const anchor = Bodies.circle(worldX, worldY, 4, {
+      isStatic: true, label: 'Anchor', collisionFilter: { group: -1 }
+    });
+    Composite.add(world, anchor);
+    const con = Constraint.create({
+      bodyA: bodyA,
+      pointA: { x: 0, y: 0 },
+      bodyB: anchor,
+      pointB: { x: 0, y: 0 },
+      stiffness: stiffness || 0.05,
+      damping: 0.05
+    });
+    Composite.add(world, con);
+    return con;
+  }
+
   function addWeldConstraint(bodyA, bodyB) {
     const con = Constraint.create({
       bodyA: bodyA,
