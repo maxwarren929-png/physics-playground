@@ -138,9 +138,27 @@ const Tools = (() => {
   }
 
   let weldBodyA = null;
+  let motorBodyA = null;
   let isSelecting = false;
   let selectionStart = null;
   let copyBuffer = null;
+
+  // ── Motor ──
+  function handleMotor(sx, sy) {
+    const p = Physics.screenToWorld ? Physics.screenToWorld(sx, sy) : { x: sx, y: sy };
+    const body = Physics.getBodyAt(p.x, p.y);
+
+    if (motorBodyA) {
+      if (body && body !== motorBodyA) {
+        Physics.addMotorConstraint(motorBodyA, body, 0.05);
+      }
+      motorBodyA = null;
+    } else {
+      if (body) {
+        motorBodyA = body;
+      }
+    }
+  }
 
   // ── Copy/Paste ──
   function handleCopyStart(sx, sy) {
@@ -189,6 +207,7 @@ const Tools = (() => {
       case 'indestructible': handleIndestructible(x, y); break;
       case 'copy':    copyBuffer ? handlePaste(x, y) : handleCopyStart(x, y); break;
       case 'rotate':  handleRotate(x, y); break;
+      case 'motor':   handleMotor(x, y); break;
     }
   }
 
@@ -210,6 +229,7 @@ const Tools = (() => {
     drawStart = null;
     if (tool !== 'spring') Physics.clearSpringBodyA();
     if (tool !== 'weld') weldBodyA = null;
+    if (tool !== 'motor') motorBodyA = null;
     if (tool !== 'copy') { isSelecting = false; copyBuffer = null; }
 
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
@@ -222,7 +242,7 @@ const Tools = (() => {
 
     const canvas = Physics.getCanvas();
     if (canvas) {
-      const cursors = { spawn: 'crosshair', explode: 'cell', wall: 'copy', gravity: 'grab', erase: 'not-allowed', spring: 'pointer', weld: 'alias', camera: 'zoom-in', indestructible: 'shield', copy: 'cell', rotate: 'progress' };
+      const cursors = { spawn: 'crosshair', explode: 'cell', wall: 'copy', gravity: 'grab', erase: 'not-allowed', spring: 'pointer', weld: 'alias', camera: 'zoom-in', indestructible: 'shield', copy: 'cell', rotate: 'progress', motor: 'crosshair' };
       canvas.style.cursor = cursors[tool] || 'default';
     }
 

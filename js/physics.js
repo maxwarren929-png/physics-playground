@@ -245,6 +245,14 @@ const Physics = (() => {
         });
       });
 
+      // Motor driving
+      constraints.forEach(c => {
+        if (c.label === 'Motor' && c.bodyA && c.bodyB) {
+          Body.setAngularVelocity(c.bodyA, c._speed);
+          Body.setAngularVelocity(c.bodyB, -c._speed);
+        }
+      });
+
       // Shockwave decay
       shockwaves = shockwaves.filter(sw => {
         sw.radius += sw.speed;
@@ -845,15 +853,16 @@ const Physics = (() => {
     return con;
   }
 
-  function addWeldConstraint(bodyA, bodyB) {
+  function addMotorConstraint(bodyA, bodyB, speed) {
     const con = Constraint.create({
       bodyA: bodyA,
-      pointA: { x: 0, y: 0 },
       bodyB: bodyB,
+      pointA: { x: 0, y: 0 },
       pointB: { x: 0, y: 0 },
       stiffness: 1,
       damping: 0,
-      label: 'Weld'
+      label: 'Motor',
+      _speed: speed || 0.05
     });
     Composite.add(world, con);
     return con;
@@ -1232,6 +1241,21 @@ const Physics = (() => {
       ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
     });
 
+    // Motor constraints
+    constraints.forEach(con => {
+      if (con.label !== 'Motor' || !con.bodyA || !con.bodyB) return;
+      const ax = con.bodyA.position.x + (con.pointA ? con.pointA.x : 0);
+      const ay = con.bodyA.position.y + (con.pointA ? con.pointA.y : 0);
+      const bx = con.bodyB.position.x + (con.pointB ? con.pointB.x : 0);
+      const by = con.bodyB.position.y + (con.pointB ? con.pointB.y : 0);
+
+      ctx.strokeStyle = '#f80'; // Orange for motor
+      ctx.lineWidth = 4;        // Thick line
+      ctx.beginPath();
+      ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      ctx.beginPath(); ctx.arc((ax + bx)/2, (ay + by)/2, 6, 0, Math.PI * 2); ctx.stroke();
+    });
+
     // Mover3000 bodies
     bodies.forEach(b => {
       if (b.label === 'Mover3000') {
@@ -1442,7 +1466,7 @@ const Physics = (() => {
     explode, drawWall, addGravityWell, addBlackHole,
     addSpringConstraint, addAnchoredSpring,
     getSpringBodyA, setSpringBodyA, clearSpringBodyA,
-    addWeldConstraint, toggleMoverCamera, rotateMover, toggleIndestructible,
+    addWeldConstraint, addMotorConstraint, toggleMoverCamera, rotateMover, toggleIndestructible,
     getBodiesInArea, pasteCluster,
     removeBody, clearAll, getBodyAt, getObjectCount,
     update, getCanvas, getCtx, getEngine, getWorld,
