@@ -482,6 +482,17 @@ const Physics = (() => {
     body._hasCamera = !body._hasCamera;
   }
 
+  // ── Immovable Object ──
+  function spawnImmovable(x, y) {
+    const body = Bodies.rectangle(x, y, 80, 80, {
+      isStatic: true, restitution: 1, friction: 1, label: 'Immovable', density: 1
+    });
+    body._damage = 0; body._cracks = [];
+    body._spawnTime = performance.now();
+    Composite.add(world, body);
+    return body;
+  }
+
   // ── Explosion ──
   function explode(x, y, force) {
     const f = force || 0.3;
