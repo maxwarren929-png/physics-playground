@@ -479,8 +479,10 @@ const Physics = (() => {
     return body;
   }
 
-  function toggleMoverCamera(body) {
-    body._hasCamera = !body._hasCamera;
+  function rotateMover(body) {
+    const oldX = body._direction.x;
+    body._direction.x = -body._direction.y;
+    body._direction.y = oldX;
   }
 
   // ── Immovable Object ──
@@ -1344,13 +1346,15 @@ const Physics = (() => {
     }
 
     // Selection box for Copy tool
-    if (tool === 'copy' && typeof Tools.isSelecting !== 'undefined' && Tools.isSelecting()) {
+    if (tool === 'copy' && typeof Tools.isSelecting === 'function' && Tools.isSelecting()) {
       const start = Tools.getSelectionStart();
-      const s = screenToWorld(start.x, start.y);
-      const e = screenToWorld(mouseX, mouseY);
-      ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)'; // Cyan box
-      ctx.lineWidth = 2;
-      ctx.strokeRect(Math.min(s.x, e.x), Math.min(s.y, e.y), Math.abs(e.x - s.x), Math.abs(e.y - s.y));
+      if (start) {
+        const s = screenToWorld(start.x, start.y);
+        const e = screenToWorld(mouseX, mouseY);
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)'; // Cyan box
+        ctx.lineWidth = 2;
+        ctx.strokeRect(Math.min(s.x, e.x), Math.min(s.y, e.y), Math.abs(e.x - s.x), Math.abs(e.y - s.y));
+      }
     }
 
     // Mover3000 preview
@@ -1438,7 +1442,7 @@ const Physics = (() => {
     explode, drawWall, addGravityWell, addBlackHole,
     addSpringConstraint, addAnchoredSpring,
     getSpringBodyA, setSpringBodyA, clearSpringBodyA,
-    addWeldConstraint, toggleMoverCamera, toggleIndestructible,
+    addWeldConstraint, toggleMoverCamera, rotateMover, toggleIndestructible,
     getBodiesInArea, pasteCluster,
     removeBody, clearAll, getBodyAt, getObjectCount,
     update, getCanvas, getCtx, getEngine, getWorld,

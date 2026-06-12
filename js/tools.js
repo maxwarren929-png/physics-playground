@@ -166,6 +166,15 @@ const Tools = (() => {
     }
   }
 
+  // ── Rotate Mover ──
+  function handleRotate(sx, sy) {
+    const p = Physics.screenToWorld ? Physics.screenToWorld(sx, sy) : { x: sx, y: sy };
+    const body = Physics.getBodyAt(p.x, p.y);
+    if (body && body.label === 'Mover3000') {
+      Physics.rotateMover(body);
+    }
+  }
+
   // ── Dispatch ──
   function onMouseDown(x, y) {
     switch (currentTool) {
@@ -179,6 +188,7 @@ const Tools = (() => {
       case 'camera':  handleCamera(x, y); break;
       case 'indestructible': handleIndestructible(x, y); break;
       case 'copy':    copyBuffer ? handlePaste(x, y) : handleCopyStart(x, y); break;
+      case 'rotate':  handleRotate(x, y); break;
     }
   }
 
@@ -212,7 +222,7 @@ const Tools = (() => {
 
     const canvas = Physics.getCanvas();
     if (canvas) {
-      const cursors = { spawn: 'crosshair', explode: 'cell', wall: 'copy', gravity: 'grab', erase: 'not-allowed', spring: 'pointer', weld: 'alias', camera: 'zoom-in', indestructible: 'shield', copy: 'cell' };
+      const cursors = { spawn: 'crosshair', explode: 'cell', wall: 'copy', gravity: 'grab', erase: 'not-allowed', spring: 'pointer', weld: 'alias', camera: 'zoom-in', indestructible: 'shield', copy: 'cell', rotate: 'progress' };
       canvas.style.cursor = cursors[tool] || 'default';
     }
 
