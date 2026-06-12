@@ -137,7 +137,6 @@ const Tools = (() => {
     }
   }
 
-  let weldBodyA = null;
   let motorBodyA = null;
   let isSelecting = false;
   let selectionStart = null;

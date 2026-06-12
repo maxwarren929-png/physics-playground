@@ -857,6 +857,20 @@ const Physics = (() => {
     return con;
   }
 
+  function addWeldConstraint(bodyA, bodyB) {
+    const con = Constraint.create({
+      bodyA: bodyA,
+      pointA: { x: 0, y: 0 },
+      bodyB: bodyB,
+      pointB: { x: 0, y: 0 },
+      stiffness: 1,
+      damping: 0,
+      label: 'Weld'
+    });
+    Composite.add(world, con);
+    return con;
+  }
+
   function addMotorConstraint(bodyA, bodyB, speed) {
     const con = Constraint.create({
       bodyA: bodyA,
@@ -1466,21 +1480,60 @@ const Physics = (() => {
   function getWorldH() { return worldH; }
 
   const physics = {
-    init, spawnShape, spawnRagdoll, spawnForce, spawnMover3000, spawnImmovable,
-    explode, drawWall, addGravityWell, addBlackHole,
-    addSpringConstraint, addAnchoredSpring,
-    getSpringBodyA, setSpringBodyA, clearSpringBodyA,
-    addWeldConstraint, addMotorConstraint, toggleMoverCamera, rotateMover, toggleIndestructible,
-    getBodiesInArea, pasteCluster,
-    removeBody, clearAll, getBodyAt, getObjectCount,
-    update, getCanvas, getCtx, getEngine, getWorld,
-    togglePause, setMousePos,
-    startDrag, moveDrag, endDrag, isDragging,
-    screenToWorld, handleZoom, panCamera, resetCamera, getCamera,
-    applyWorldSize, getWorldSizes, getWorldSizeKey,
-    getWorldW, getWorldH,
-    toggleWind, isWindEnabled, setWindStrength, getWindAngle, setWindAngle,
-    addShockwave, getFps
+    init: init,
+    spawnShape: spawnShape,
+    spawnRagdoll: spawnRagdoll,
+    spawnForce: spawnForce,
+    spawnMover3000: spawnMover3000,
+    spawnImmovable: spawnImmovable,
+    explode: explode,
+    drawWall: drawWall,
+    addGravityWell: addGravityWell,
+    addBlackHole: addBlackHole,
+    addSpringConstraint: addSpringConstraint,
+    addAnchoredSpring: addAnchoredSpring,
+    getSpringBodyA: getSpringBodyA,
+    setSpringBodyA: setSpringBodyA,
+    clearSpringBodyA: clearSpringBodyA,
+    addWeldConstraint: addWeldConstraint,
+    addMotorConstraint: addMotorConstraint,
+    toggleMoverCamera: toggleMoverCamera,
+    rotateMover: rotateMover,
+    toggleIndestructible: toggleIndestructible,
+    getBodiesInArea: getBodiesInArea,
+    pasteCluster: pasteCluster,
+    removeBody: removeBody,
+    clearAll: clearAll,
+    getBodyAt: getBodyAt,
+    getObjectCount: getObjectCount,
+    update: update,
+    getCanvas: getCanvas,
+    getCtx: getCtx,
+    getEngine: getEngine,
+    getWorld: getWorld,
+    togglePause: togglePause,
+    setMousePos: setMousePos,
+    startDrag: startDrag,
+    moveDrag: moveDrag,
+    endDrag: endDrag,
+    isDragging: isDragging,
+    screenToWorld: screenToWorld,
+    handleZoom: handleZoom,
+    panCamera: panCamera,
+    resetCamera: resetCamera,
+    getCamera: getCamera,
+    applyWorldSize: applyWorldSize,
+    getWorldSizes: getWorldSizes,
+    getWorldSizeKey: getWorldSizeKey,
+    getWorldW: getWorldW,
+    getWorldH: getWorldH,
+    toggleWind: toggleWind,
+    isWindEnabled: isWindEnabled,
+    setWindStrength: setWindStrength,
+    getWindAngle: getWindAngle,
+    setWindAngle: setWindAngle,
+    addShockwave: addShockwave,
+    getFps: getFps
   };
   return physics;
 })();
