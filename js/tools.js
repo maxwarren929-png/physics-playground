@@ -11,6 +11,24 @@ const Tools = (() => {
   let mouseX = 0, mouseY = 0;
   let gravityMode = 'well'; // 'well' or 'hole'
   let springStiffness = 0.05;
+  let weldBodyA = null;
+
+  // ── Weld ──
+  function handleWeld(sx, sy) {
+    const p = Physics.screenToWorld ? Physics.screenToWorld(sx, sy) : { x: sx, y: sy };
+    const body = Physics.getBodyAt(p.x, p.y);
+
+    if (weldBodyA) {
+      if (body && body !== weldBodyA) {
+        Physics.addWeldConstraint(weldBodyA, body);
+      }
+      weldBodyA = null;
+    } else {
+      if (body) {
+        weldBodyA = body;
+      }
+    }
+  }
 
   // ── Spawn ──
   function handleSpawn(sx, sy) {
@@ -25,12 +43,24 @@ const Tools = (() => {
         const angle = parseFloat(document.getElementById('forceAngle').value) || 0;
         Physics.spawnForce(p.x, p.y, strength, angle);
         break;
+      case 'mover3000':
+        Physics.spawnMover3000(p.x, p.y);
+        break;
       case 'immovable':
         Physics.spawnImmovable(p.x, p.y);
         break;
       default:
         Physics.spawnShape(p.x, p.y, currentShape, size);
         break;
+    }
+  }
+
+  // ── Camera Tool ──
+  function handleCamera(sx, sy) {
+    const p = Physics.screenToWorld ? Physics.screenToWorld(sx, sy) : { x: sx, y: sy };
+    const body = Physics.getBodyAt(p.x, p.y);
+    if (body && body.label === 'Mover3000') {
+      Physics.toggleMoverCamera(body);
     }
   }
 
@@ -106,6 +136,8 @@ const Tools = (() => {
       case 'gravity': handleGravity(x, y); break;
       case 'erase':   handleErase(x, y); break;
       case 'spring':  handleSpring(x, y); break;
+      case 'weld':    handleWeld(x, y); break;
+      case 'camera':  handleCamera(x, y); break;
     }
   }
 
@@ -125,6 +157,7 @@ const Tools = (() => {
     isDrawing = false;
     drawStart = null;
     if (tool !== 'spring') Physics.clearSpringBodyA();
+    if (tool !== 'weld') weldBodyA = null;
 
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
     const btn = document.querySelector(`[data-tool="${tool}"]`);
@@ -136,9 +169,10 @@ const Tools = (() => {
 
     const canvas = Physics.getCanvas();
     if (canvas) {
-      const cursors = { spawn: 'crosshair', explode: 'cell', wall: 'copy', gravity: 'grab', erase: 'not-allowed', spring: 'pointer' };
+      const cursors = { spawn: 'crosshair', explode: 'cell', wall: 'copy', gravity: 'grab', erase: 'not-allowed', spring: 'pointer', weld: 'alias', camera: 'zoom-in' };
       canvas.style.cursor = cursors[tool] || 'default';
     }
+
   }
 
   // ── Accessors ──

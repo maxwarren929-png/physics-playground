@@ -781,19 +781,15 @@ const Physics = (() => {
     return con;
   }
 
-  function addAnchoredSpring(bodyA, worldX, worldY, stiffness) {
-    // Create a static point body as anchor
-    const anchor = Bodies.circle(worldX, worldY, 4, {
-      isStatic: true, label: 'Anchor', collisionFilter: { group: -1 }
-    });
-    Composite.add(world, anchor);
+  function addWeldConstraint(bodyA, bodyB) {
     const con = Constraint.create({
       bodyA: bodyA,
       pointA: { x: 0, y: 0 },
-      bodyB: anchor,
+      bodyB: bodyB,
       pointB: { x: 0, y: 0 },
-      stiffness: stiffness || 0.05,
-      damping: 0.05
+      stiffness: 1,
+      damping: 0,
+      label: 'Weld'
     });
     Composite.add(world, con);
     return con;
@@ -1109,6 +1105,19 @@ const Physics = (() => {
       }
     });
 
+    // Weld constraints
+    constraints.forEach(con => {
+      if (con.label !== 'Weld' || !con.bodyA || !con.bodyB) return;
+      const ax = con.bodyA.position.x + (con.pointA ? con.pointA.x : 0);
+      const ay = con.bodyA.position.y + (con.pointA ? con.pointA.y : 0);
+      const bx = con.bodyB.position.x + (con.pointB ? con.pointB.x : 0);
+      const by = con.bodyB.position.y + (con.pointB ? con.pointB.y : 0);
+
+      ctx.strokeStyle = '#f00'; // Red for weld
+      ctx.lineWidth = 4;        // Thick line
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    });
+
     // Force bodies
     bodies.forEach(b => {
       if (b.label === 'Force') {
@@ -1276,6 +1285,7 @@ const Physics = (() => {
     explode, drawWall, addGravityWell, addBlackHole,
     addSpringConstraint, addAnchoredSpring,
     getSpringBodyA, setSpringBodyA, clearSpringBodyA,
+    addWeldConstraint,
     removeBody, clearAll, getBodyAt, getObjectCount,
     update, getCanvas, getCtx, getEngine, getWorld,
     togglePause, setMousePos,
