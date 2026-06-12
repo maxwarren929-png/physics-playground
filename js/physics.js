@@ -886,6 +886,13 @@ const Physics = (() => {
     return con;
   }
 
+  function removeBody(body) {
+    if (body._handler) Events.off(engine, 'beforeUpdate', body._handler);
+    delete decayTimers[body.id];
+    forceBodies = forceBodies.filter(b => b !== body);
+    Composite.remove(world, body);
+  }
+
   function getBodiesInArea(x1, y1, x2, y2) {
     const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
     const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
@@ -1388,7 +1395,7 @@ const Physics = (() => {
     }
 
     // Selection box for Copy tool
-    if (tool === 'copy' && typeof Tools.isSelecting === 'function' && Tools.isSelecting()) {
+    if (tool === 'copy' && typeof Tools.isToolSelecting === 'function' && Tools.isToolSelecting()) {
       const start = Tools.getSelectionStart();
       if (start) {
         const s = screenToWorld(start.x, start.y);

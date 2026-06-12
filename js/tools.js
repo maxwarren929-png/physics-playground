@@ -249,7 +249,7 @@ const Tools = (() => {
 
   // ── Accessors ──
   function isCurrentlyDrawing() { return isDrawing; }
-  function isSelecting() { return isSelecting; }
+  function isToolSelecting() { return isSelecting; }
   function getSelectionStart() { return selectionStart; }
   function getDrawStart() { return drawStart; }
   function getCurrentTool() { return currentTool; }
@@ -264,7 +264,7 @@ const Tools = (() => {
 
   return {
     onMouseDown, onMouseMove, onMouseUp, setTool,
-    isCurrentlyDrawing, isSelecting, getSelectionStart, getDrawStart, getCurrentTool,
+    isCurrentlyDrawing, isToolSelecting, getSelectionStart, getDrawStart, getCurrentTool,
     getCurrentShape, setCurrentShape,
     getGravityMode, setGravityMode,
     getSpringStiffness, setSpringStiffness,
